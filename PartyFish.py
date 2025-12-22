@@ -2,7 +2,6 @@ import time
 import os
 import webbrowser
 import warnings
-import pyautogui
 import cv2
 import numpy as np
 from PIL import Image
@@ -19,6 +18,7 @@ os.environ["OPENCV_IO_ENABLE_JASPER"] = "0"
 
 import tkinter as tk  # 保留用于兼容性
 from tkinter import ttk  # 保留用于兼容性
+from tkinter import messagebox
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 import json  # 用于保存和加载参数
@@ -43,6 +43,12 @@ except ImportError:
 param_lock = threading.Lock()  # 参数读写锁
 
 # =========================
+# 钓鱼记录开关
+# =========================
+record_fish_enabled = True  # 默认启用钓鱼记录
+legendary_screenshot_enabled = True # 默认关闭传说/传奇鱼自动截屏
+
+# =========================
 # 参数文件路径
 # =========================
 PARAMETER_FILE = "./parameters.json"
@@ -60,7 +66,9 @@ def save_parameters():
         "resolution": resolution_choice,  # 保存分辨率选择
         "custom_width": TARGET_WIDTH,  # 保存自定义宽度
         "custom_height": TARGET_HEIGHT,  # 保存自定义高度
-        "hotkey": hotkey_name  # 保存热键设置（如 "Ctrl+Shift+A" 或 "F2"）
+        "hotkey": hotkey_name,  # 保存热键设置（如 "Ctrl+Shift+A" 或 "F2"）
+        "record_fish_enabled": record_fish_enabled,  # 保存钓鱼记录开关状态
+        "legendary_screenshot_enabled": legendary_screenshot_enabled,  # 保存传说/传奇鱼自动截屏开关状态
     }
     try:
         with open(PARAMETER_FILE, "w") as f:
@@ -74,28 +82,34 @@ def load_parameters():
     global resolution_choice, TARGET_WIDTH, TARGET_HEIGHT, SCALE_X, SCALE_Y
     global hotkey_name, hotkey_modifiers, hotkey_main_key
     try:
-        with open(PARAMETER_FILE, "r") as f:
-            params = json.load(f)
-            t = params.get("t", t)
-            leftclickdown = params.get("leftclickdown", leftclickdown)
-            leftclickup = params.get("leftclickup", leftclickup)
-            times = params.get("times", times)
-            paogantime = params.get("paogantime", paogantime)
-            jiashi_var = params.get("jiashi_var", jiashi_var)
-            resolution_choice = params.get("resolution", "2K")
-            # 加载热键设置（新格式支持组合键）
-            saved_hotkey = params.get("hotkey", "F2")
-            try:
-                modifiers, main_key, main_key_name = parse_hotkey_string(saved_hotkey)
-                if main_key is not None:
-                    hotkey_name = saved_hotkey
-                    hotkey_modifiers = modifiers
-                    hotkey_main_key = main_key
-            except Exception:
-                # 解析失败，使用默认值
-                hotkey_name = "F2"
-                hotkey_modifiers = set()
-                hotkey_main_key = keyboard.Key.f2
+            with open(PARAMETER_FILE, "r") as f:
+                params = json.load(f)
+                t = params.get("t", t)
+                leftclickdown = params.get("leftclickdown", leftclickdown)
+                leftclickup = params.get("leftclickup", leftclickup)
+                times = params.get("times", times)
+                paogantime = params.get("paogantime", paogantime)
+                jiashi_var = params.get("jiashi_var", jiashi_var)
+                resolution_choice = params.get("resolution", "2K")
+                # 加载钓鱼记录开关状态
+                global record_fish_enabled
+                record_fish_enabled = params.get("record_fish_enabled", True)
+                # 加载传说/传奇鱼自动截屏开关状态
+                global legendary_screenshot_enabled
+                legendary_screenshot_enabled = params.get("legendary_screenshot_enabled", True)
+                # 加载热键设置（新格式支持组合键）
+                saved_hotkey = params.get("hotkey", "F2")
+                try:
+                    modifiers, main_key, main_key_name = parse_hotkey_string(saved_hotkey)
+                    if main_key is not None:
+                        hotkey_name = saved_hotkey
+                        hotkey_modifiers = modifiers
+                        hotkey_main_key = main_key
+                except Exception:
+                    # 解析失败，使用默认值
+                    hotkey_name = "F2"
+                    hotkey_modifiers = set()
+                    hotkey_main_key = keyboard.Key.f2
             # 根据分辨率选择设置目标分辨率
             if resolution_choice == "1080P":
                 TARGET_WIDTH, TARGET_HEIGHT = 1920, 1080
@@ -121,10 +135,12 @@ def load_parameters():
 # 更新参数
 # =========================
 def update_parameters(t_var, leftclickdown_var, leftclickup_var, times_var, paogantime_var, jiashi_var_option,
-                      resolution_var, custom_width_var, custom_height_var, hotkey_var=None):
+                      resolution_var, custom_width_var, custom_height_var, hotkey_var=None, record_fish_var=None,
+                      legendary_screenshot_var=None):
     global t, leftclickdown, leftclickup, times, paogantime, jiashi_var
     global resolution_choice, TARGET_WIDTH, TARGET_HEIGHT, SCALE_X, SCALE_Y
     global hotkey_name, hotkey_modifiers, hotkey_main_key
+    global record_fish_enabled, legendary_screenshot_enabled
 
     with param_lock:  # 使用锁保护参数更新
         try:
@@ -134,6 +150,14 @@ def update_parameters(t_var, leftclickdown_var, leftclickup_var, times_var, paog
             times = int(times_var.get())
             paogantime = float(paogantime_var.get())
             jiashi_var = jiashi_var_option.get()
+            
+            # 更新钓鱼记录开关状态
+            if record_fish_var is not None:
+                record_fish_enabled = bool(record_fish_var.get())
+            
+            # 更新传说/传奇鱼自动截屏开关状态
+            if legendary_screenshot_var is not None:
+                legendary_screenshot_enabled = bool(legendary_screenshot_var.get())
 
             # 更新热键设置（新格式支持组合键）
             if hotkey_var is not None:
@@ -192,8 +216,9 @@ def create_gui():
     # 创建现代化主题窗口
     root = ttkb.Window(themename="darkly")  # 使用深色主题
     root.title("🎣 PartyFish 自动钓鱼助手")
-    root.geometry("950x750")  # 增加高度以容纳热键设置
-    root.minsize(900, 720)    # 增加最小尺寸
+    root.geometry("1109x800")  # 增大初始高度，确保所有信息完整显示
+    root.minsize(600, 400)    # 减小最小尺寸限制，允许更灵活的缩放
+    root.maxsize(1200, 900)    # 增大最大尺寸限制，避免窗口过大
     root.resizable(True, True)  # 允许调整大小
 
     # 设置窗口图标（如果有的话）
@@ -207,8 +232,8 @@ def create_gui():
     main_frame.pack(fill=BOTH, expand=YES)
 
     # 配置主框架的行列权重
-    main_frame.columnconfigure(0, weight=0, minsize=300)  # 左侧固定宽度
-    main_frame.columnconfigure(1, weight=1, minsize=500)  # 右侧自适应扩展
+    main_frame.columnconfigure(0, weight=0, minsize=280)  # 左侧面板最小宽度调整，确保设置项完整显示
+    main_frame.columnconfigure(1, weight=2, minsize=400)  # 右侧面板权重增加，更好地自适应扩展
     main_frame.rowconfigure(0, weight=1)  # 内容区域自适应高度
 
     # ==================== 左侧面板（设置区域） ====================
@@ -557,11 +582,87 @@ def create_gui():
         custom_frame.pack(fill=X, pady=(5, 0))
     info_label.pack(pady=(8, 0))
 
+    # ==================== 钓鱼记录开关卡片 ====================
+    record_card = ttkb.Labelframe(
+        left_panel,
+        text=" 📝 钓鱼记录设置 ",
+        padding=8,
+        bootstyle="info"
+    )
+    record_card.pack(fill=X, pady=(0, 4))
+
+    # 钓鱼记录开关
+    record_fish_var = ttkb.IntVar(value=1 if record_fish_enabled else 0)
+
+    record_frame = ttkb.Frame(record_card)
+    record_frame.pack(fill=X)
+
+    record_label = ttkb.Label(record_frame, text="是否启用钓鱼记录", font=("Segoe UI", 9))
+    record_label.pack(side=LEFT)
+
+    record_btn_frame = ttkb.Frame(record_frame)
+    record_btn_frame.pack(side=RIGHT)
+
+    record_yes = ttkb.Radiobutton(
+        record_btn_frame,
+        text="是",
+        variable=record_fish_var,
+        value=1,
+        bootstyle="success-outline-toolbutton"
+    )
+    record_yes.pack(side=LEFT, padx=5)
+
+    record_no = ttkb.Radiobutton(
+        record_btn_frame,
+        text="否",
+        variable=record_fish_var,
+        value=0,
+        bootstyle="danger-outline-toolbutton"
+    )
+    record_no.pack(side=LEFT, padx=5)
+
+    # 传说/传奇鱼自动截屏开关
+    legendary_screenshot_var = ttkb.IntVar(value=1 if legendary_screenshot_enabled else 0)
+    
+    legendary_frame = ttkb.Frame(record_card)
+    legendary_frame.pack(fill=X, pady=(5, 0))
+    
+    legendary_label = ttkb.Label(legendary_frame, text="传说/传奇鱼自动截屏", font=("Segoe UI", 9))
+    legendary_label.pack(side=LEFT)
+    
+    legendary_btn_frame = ttkb.Frame(legendary_frame)
+    legendary_btn_frame.pack(side=RIGHT)
+    
+    legendary_yes = ttkb.Radiobutton(
+        legendary_btn_frame,
+        text="是",
+        variable=legendary_screenshot_var,
+        value=1,
+        bootstyle="success-outline-toolbutton"
+    )
+    legendary_yes.pack(side=LEFT, padx=5)
+    
+    legendary_no = ttkb.Radiobutton(
+        legendary_btn_frame,
+        text="否",
+        variable=legendary_screenshot_var,
+        value=0,
+        bootstyle="danger-outline-toolbutton"
+    )
+    legendary_no.pack(side=LEFT, padx=5)
+
     # ==================== 右侧面板（钓鱼记录区域） ====================
     right_panel = ttkb.Frame(main_frame)
     right_panel.grid(row=0, column=1, sticky="nsew")
 
     # ==================== 钓鱼记录卡片 ====================
+    # 先创建style对象
+    style = ttk.Style()
+    
+    # 设置自定义海洋蓝边框
+    style.configure("OceanBlue.TLabelframe", bordercolor="#1E90FF")
+    style.configure("OceanBlue.TLabelframe.Label", foreground="#1E90FF")
+    
     fish_record_card = ttkb.Labelframe(
         right_panel,
         text=" 🐟 钓鱼记录 ",
@@ -569,6 +670,7 @@ def create_gui():
         bootstyle="primary"
     )
     fish_record_card.pack(fill=BOTH, expand=YES)
+    fish_record_card.configure(style="OceanBlue.TLabelframe")
 
     # 切换按钮（本次/总览）
     record_view_frame = ttkb.Frame(fish_record_card)
@@ -643,7 +745,7 @@ def create_gui():
     quality_combo = ttkb.Combobox(
         search_frame,
         textvariable=quality_var,
-        values=["全部"] + QUALITY_LEVELS,
+        values=["全部"] + GUI_QUALITY_LEVELS,
         width=8,
         state="readonly",
         font=("Segoe UI", 9)
@@ -651,6 +753,65 @@ def create_gui():
     quality_combo.pack(side=LEFT, padx=5)
     quality_combo.bind("<<ComboboxSelected>>", lambda e: update_fish_display())
 
+    # 统计信息卡片
+    # 设置自定义紫色边框
+    style.configure("Purple.TLabelframe", bordercolor="#9B59B6")
+    style.configure("Purple.TLabelframe.Label", foreground="#9B59B6")
+    
+    stats_card = ttkb.Labelframe(
+        fish_record_card,
+        text=" 📊 钓鱼统计 ",
+        padding=15,
+        bootstyle="primary"
+    )
+    stats_card.pack(fill=X, pady=(0, 10))
+    stats_card.configure(relief="solid", borderwidth=1)
+    stats_card.configure(style="Purple.TLabelframe")
+    
+    # 品质统计框架 - 网格布局
+    stats_grid = ttkb.Frame(stats_card)
+    stats_grid.pack(fill=X, expand=True)
+    
+    # 创建统计标签变量
+    standard_var = ttkb.StringVar(value="⚪ 标准: 0 (0.00%)")
+    uncommon_var = ttkb.StringVar(value="🟢 非凡: 0 (0.00%)")
+    rare_var = ttkb.StringVar(value="🔵 稀有: 0 (0.00%)")
+    epic_var = ttkb.StringVar(value="🟣 史诗: 0 (0.00%)")
+    legendary_var = ttkb.StringVar(value="🟡 传说: 0 (0.00%)")
+    total_var = ttkb.StringVar(value="📝 总计: 0 条")
+    
+    # 品质统计标签 - 网格布局
+    standard_label = ttkb.Label(stats_grid, textvariable=standard_var, font=("Segoe UI", 10, "bold"), foreground="#FFFFFF")
+    standard_label.pack(side=LEFT, padx=10, pady=8, expand=True, fill=X)
+    
+    uncommon_label = ttkb.Label(stats_grid, textvariable=uncommon_var, font=("Segoe UI", 10, "bold"), foreground="#2ECC71")
+    uncommon_label.pack(side=LEFT, padx=10, pady=8, expand=True, fill=X)
+    
+    rare_label = ttkb.Label(stats_grid, textvariable=rare_var, font=("Segoe UI", 10, "bold"), foreground="#1E90FF")
+    rare_label.pack(side=LEFT, padx=10, pady=8, expand=True, fill=X)
+    
+    epic_label = ttkb.Label(stats_grid, textvariable=epic_var, font=("Segoe UI", 10, "bold"), foreground="#9B59B6")
+    epic_label.pack(side=LEFT, padx=10, pady=8, expand=True, fill=X)
+    
+    legendary_label = ttkb.Label(stats_grid, textvariable=legendary_var, font=("Segoe UI", 10, "bold"), foreground="#F1C40F")
+    legendary_label.pack(side=LEFT, padx=10, pady=8, expand=True, fill=X)
+    
+    # 总计和清空按钮框架
+    total_frame = ttkb.Frame(stats_card)
+    total_frame.pack(fill=X, expand=True)
+    
+    total_label = ttkb.Label(total_frame, textvariable=total_var, font=("Segoe UI", 11, "bold"), bootstyle="success")
+    total_label.pack(side=LEFT, padx=10, pady=8)
+    
+    # 清空按钮
+    clear_btn = ttkb.Button(
+        total_frame,
+        text="🗑️ 清空记录",
+        command=lambda: clear_fish_records(),
+        bootstyle="danger-outline"
+    )
+    clear_btn.pack(side=RIGHT, padx=10, pady=8)
+    
     # 记录列表容器（包含Treeview和滚动条）
     tree_container = ttkb.Frame(fish_record_card)
     tree_container.pack(fill=BOTH, expand=YES, pady=(0, 8))
@@ -661,7 +822,6 @@ def create_gui():
         tree_container,
         columns=columns,
         show="headings",
-        height=15,
         bootstyle="info"
     )
 
@@ -685,13 +845,13 @@ def create_gui():
     tree_scroll.pack(side=RIGHT, fill=Y)
 
     # 配置品质颜色标签（背景色和前景色）
-    # 标准-白色背景黑色字体, 非凡-绿色, 稀有-蓝色, 史诗-紫色, 传说/传奇-橙色
+    # 标准-白色背景黑色字体, 非凡-绿色, 稀有-海洋蓝色, 史诗-紫色, 传说/传奇-金色
     fish_tree.tag_configure("标准", background="#FFFFFF", foreground="#000000")
     fish_tree.tag_configure("非凡", background="#2ECC71", foreground="#000000")
-    fish_tree.tag_configure("稀有", background="#3498DB", foreground="#FFFFFF")
+    fish_tree.tag_configure("稀有", background="#1E90FF", foreground="#FFFFFF")
     fish_tree.tag_configure("史诗", background="#9B59B6", foreground="#FFFFFF")
-    fish_tree.tag_configure("传说", background="#E67E22", foreground="#000000")
-    fish_tree.tag_configure("传奇", background="#E67E22", foreground="#000000")  # 传奇与传说同色
+    fish_tree.tag_configure("传说", background="#F1C40F", foreground="#000000")
+    fish_tree.tag_configure("传奇", background="#F1C40F", foreground="#000000")  # 传奇与传说同色
 
     # 绑定鼠标滚轮到Treeview
     def on_tree_mousewheel(event):
@@ -726,6 +886,48 @@ def create_gui():
 
         # 获取筛选后的记录
         filtered = search_fish_records(keyword, quality_filter, use_session)
+        
+        # 获取所有记录用于统计（不考虑搜索和筛选）
+        all_records = current_session_fish if use_session else all_fish_records
+        
+        # 计算品质统计
+        total = len(all_records)
+        quality_counts = {
+            "标准": 0,
+            "非凡": 0,
+            "稀有": 0,
+            "史诗": 0,
+            "传说": 0,
+            "传奇": 0
+        }
+        
+        for record in all_records:
+            if record.quality in quality_counts:
+                quality_counts[record.quality] += 1
+        
+        # 合并传说和传奇的计数（因为它们是同一品质的不同名称）
+        total_legendary = quality_counts["传说"] + quality_counts["传奇"]
+        
+        # 计算概率并更新标签
+        def calc_percentage(count):
+            return (count / total * 100) if total > 0 else 0
+        
+        # 品质图标映射
+        quality_icons = {
+            "标准": "⚪",
+            "非凡": "🟢",
+            "稀有": "🔵",
+            "史诗": "🟣",
+            "传说": "🟡"
+        }
+        
+        # 格式化显示，添加图标和更美观的样式
+        standard_var.set(f"{quality_icons['标准']} 标准: {quality_counts['标准']} ({calc_percentage(quality_counts['标准']):.2f}%)")
+        uncommon_var.set(f"{quality_icons['非凡']} 非凡: {quality_counts['非凡']} ({calc_percentage(quality_counts['非凡']):.2f}%)")
+        rare_var.set(f"{quality_icons['稀有']} 稀有: {quality_counts['稀有']} ({calc_percentage(quality_counts['稀有']):.2f}%)")
+        epic_var.set(f"{quality_icons['史诗']} 史诗: {quality_counts['史诗']} ({calc_percentage(quality_counts['史诗']):.2f}%)")
+        legendary_var.set(f"{quality_icons['传说']} 传说: {total_legendary} ({calc_percentage(total_legendary):.2f}%)")
+        total_var.set(f"📊 总计: {total} 条")
 
         # 显示记录（倒序，最新的在前面）
         for record in reversed(filtered[-100:]):  # 最多显示100条
@@ -743,11 +945,11 @@ def create_gui():
             ), tags=(quality_tag,))
 
         # 更新统计
-        total = len(filtered)
+        total_display = len(filtered)
         if use_session:
-            stats_var.set(f"本次: {total} 条")
+            stats_var.set(f"本次: {total_display} 条")
         else:
-            stats_var.set(f"总计: {total} 条")
+            stats_var.set(f"总计: {total_display} 条")
 
     # 设置GUI更新回调
     global gui_fish_update_callback
@@ -758,6 +960,38 @@ def create_gui():
             pass
     gui_fish_update_callback = safe_update
 
+    def clear_fish_records():
+        """清空钓鱼记录"""
+        # 询问用户确认
+        use_session = (view_mode.get() == "current")
+        if use_session:
+            confirm_text = "确定要清空本次钓鱼记录吗？"
+        else:
+            confirm_text = "确定要清空所有历史钓鱼记录吗？此操作不可恢复！"
+        
+        result = messagebox.askyesno("确认清空", confirm_text, parent=root)
+        if not result:
+            return
+        
+        with fish_record_lock:
+            if use_session:
+                # 清空当前会话记录
+                global current_session_fish
+                current_session_fish.clear()
+            else:
+                # 清空所有记录
+                global all_fish_records
+                all_fish_records.clear()
+                # 清空记录文件
+                try:
+                    with open(FISH_RECORD_FILE, "w", encoding="utf-8") as f:
+                        f.write("")
+                except Exception as e:
+                    print(f"❌ [错误] 清空记录文件失败: {e}")
+        
+        # 更新显示
+        update_fish_display()
+    
     # 初始加载
     update_fish_display()
 
@@ -771,7 +1005,8 @@ def create_gui():
         update_parameters(
             t_var, leftclickdown_var, leftclickup_var, times_var,
             paogantime_var, jiashi_var_option, resolution_var,
-            custom_width_var, custom_height_var, hotkey_var
+            custom_width_var, custom_height_var, hotkey_var, record_fish_var,
+            legendary_screenshot_var
         )
         resolution_info_var.set(f"当前: {TARGET_WIDTH}×{TARGET_HEIGHT}")
         hotkey_info_label.config(text=f"按 {hotkey_name} 启动/暂停 | 点击按钮修改")
@@ -893,14 +1128,20 @@ def calculate_scale_factors():
     SCALE_X = TARGET_WIDTH / BASE_WIDTH
     SCALE_Y = TARGET_HEIGHT / BASE_HEIGHT
 
-    # 使用统一缩放比例（取较小值，确保UI元素在屏幕内）
-    # 对于模板匹配，使用统一缩放避免变形
-    SCALE_UNIFORM = min(SCALE_X, SCALE_Y)
+    # 对于模板匹配和UI元素定位，使用基于宽高比的统一缩放
+    # 16:10等非16:9分辨率需要特殊处理，确保UI元素正确定位
+    # 16:10的宽高比(1.6)比16:9(1.78)小，所以需要特殊处理
+    # 游戏UI通常会保持水平居中，垂直方向调整位置
+    
+    # 使用基于高度的缩放，确保垂直方向元素正确显示
+    SCALE_UNIFORM = SCALE_Y
 
     return SCALE_X, SCALE_Y, SCALE_UNIFORM
 
 # 初始化统一缩放比例
-SCALE_UNIFORM = min(SCALE_X, SCALE_Y)
+# 与calculate_scale_factors函数逻辑保持一致
+# 使用基于高度的缩放，确保垂直方向元素正确显示
+SCALE_UNIFORM = SCALE_Y
 
 def scale_coords(x, y, w, h):
     """根据分辨率缩放坐标"""
@@ -934,10 +1175,12 @@ def scale_corner_anchored(base_x, base_y, base_w, base_h, anchor="bottom_right")
         offset_from_right = BASE_WIDTH - base_x
         offset_from_bottom = BASE_HEIGHT - base_y
         # 在目标分辨率中，从右下角计算实际位置
-        new_x = TARGET_WIDTH - int(offset_from_right * SCALE_UNIFORM)
-        new_y = TARGET_HEIGHT - int(offset_from_bottom * SCALE_UNIFORM)
-        new_w = int(base_w * SCALE_UNIFORM)
-        new_h = int(base_h * SCALE_UNIFORM)
+        # 使用基于高度的缩放比例，确保16:10等非16:9分辨率下元素正确定位
+        scale = SCALE_UNIFORM
+        new_x = TARGET_WIDTH - int(offset_from_right * scale)
+        new_y = TARGET_HEIGHT - int(offset_from_bottom * scale)
+        new_w = int(base_w * scale)
+        new_h = int(base_h * scale)
         return (new_x, new_y, new_w, new_h)
     elif anchor == "center":
         # 居中的元素按比例缩放
@@ -1005,13 +1248,15 @@ FISH_INFO_REGION_BASE = (915, 75, 1640, 225)  # 左上角x, y, 右下角x, y
 
 # 品质等级定义（包含"传奇"作为"传说"的别名，部分游戏版本可能使用不同名称）
 QUALITY_LEVELS = ["标准", "非凡", "稀有", "史诗", "传说", "传奇"]
+# GUI专用品质列表，不包含"传奇"选项，避免在GUI筛选中显示
+GUI_QUALITY_LEVELS = ["标准", "非凡", "稀有", "史诗", "传说"]
 QUALITY_COLORS = {
     "标准": "⚪",
     "非凡": "🟢",
     "稀有": "🔵",
     "史诗": "🟣",
     "传说": "🟡",
-    "传奇": "🟡"  # 传奇与传说同级，使用相同颜色
+    "传奇": "🟡"  # 传奇与传说同级，使用相同颜色（用于兼容旧记录）
 }
 
 # 当前会话数据
@@ -1234,8 +1479,9 @@ def recognize_fish_info_ocr(img):
 def record_caught_fish():
     """识别并记录钓到的鱼"""
     global current_session_fish, all_fish_records
+    global record_fish_enabled
 
-    if not OCR_AVAILABLE:
+    if not OCR_AVAILABLE or not record_fish_enabled:
         return None
 
     # 等待鱼信息显示
@@ -1254,6 +1500,9 @@ def record_caught_fish():
 
     # 创建记录
     with fish_record_lock:
+        # 合并"传奇"和"传说"品质，统一使用"传说"
+        if fish_quality == "传奇":
+            fish_quality = "传说"
         fish = FishRecord(fish_name, fish_quality, fish_weight)
         current_session_fish.append(fish)
         all_fish_records.append(fish)
@@ -1262,6 +1511,30 @@ def record_caught_fish():
     # 终端输出
     quality_emoji = QUALITY_COLORS.get(fish.quality, "⚪")
     print(f"🐟 [钓到] {quality_emoji} {fish.name} | 品质: {fish.quality} | 重量: {fish.weight}")
+
+    # 传说/传奇鱼自动截屏
+    if legendary_screenshot_enabled and fish.quality == "传说":
+        try:
+            # 使用mss截取全屏
+            with mss.mss() as sct:
+                # 获取主显示器的尺寸
+                monitor = sct.monitors[1]  # 1 表示主显示器
+                screenshot = sct.grab(monitor)
+                
+                # 创建截图保存目录
+                screenshot_dir = os.path.join('.', 'screenshots')
+                os.makedirs(screenshot_dir, exist_ok=True)
+                
+                # 生成截图文件名（包含时间戳和鱼名）
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                fish_name_clean = re.sub(r'[^\w\s]', '', fish.name)
+                screenshot_path = os.path.join(screenshot_dir, f"{timestamp}_{fish_name_clean}_{fish.quality}.png")
+                
+                # 保存截图
+                mss.tools.to_png(screenshot.rgb, screenshot.size, output=screenshot_path)
+                print(f"📸 [截屏] 传说鱼已自动保存: {screenshot_path}")
+        except Exception as e:
+            print(f"❌ [错误] 截图失败: {e}")
 
     # 通知GUI更新
     if gui_fish_update_callback:
@@ -1289,9 +1562,16 @@ def search_fish_records(keyword="", quality_filter="全部", use_session=True):
 
         filtered = []
         for record in records:
-            # 品质筛选
-            if quality_filter != "全部" and record.quality != quality_filter:
-                continue
+            # 品质筛选 - 合并"传说"和"传奇"
+            if quality_filter != "全部":
+                if quality_filter == "传说":
+                    # 筛选传说时也包含传奇
+                    if record.quality not in ["传说", "传奇"]:
+                        continue
+                else:
+                    # 其他品质正常筛选
+                    if record.quality != quality_filter:
+                        continue
             # 关键词搜索
             if keyword and keyword.lower() not in record.name.lower():
                 continue
@@ -1328,8 +1608,6 @@ _cached_scale_y = None
 run_event = threading.Event()
 begin_event = threading.Event()
 user32 = ctypes.WinDLL("user32")
-pyautogui.PAUSE = 0           # 禁用 PyAutoGUI 默认的每个操作后的暂停（0.1秒）
-pyautogui.FAILSAFE = False    # 禁用 PyAutoGUI 的“鼠标移动到屏幕左上角时触发异常”功能
 listener = None #监听
 hotkey_name = "F2"  # 默认热键显示名称
 hotkey_modifiers = set()  # 修饰键集合 (ctrl, alt, shift)
@@ -1624,19 +1902,13 @@ def bait_math_val():
     global  region1, region2, result_val_is, scr
     # 鱼饵数量显示在屏幕右下角，使用锚定方式计算坐标
     x1, y1, x2, y2 = BAIT_REGION_BASE
-
-    # 计算基准坐标距离右下角的偏移
-    offset_from_right_x1 = BASE_WIDTH - x1
-    offset_from_bottom_y1 = BASE_HEIGHT - y1
-    offset_from_right_x2 = BASE_WIDTH - x2
-    offset_from_bottom_y2 = BASE_HEIGHT - y2
-
-    # 使用统一缩放比例，从目标分辨率的右下角计算实际位置
-    scale = SCALE_UNIFORM
-    actual_x1 = TARGET_WIDTH - int(offset_from_right_x1 * scale)
-    actual_y1 = TARGET_HEIGHT - int(offset_from_bottom_y1 * scale)
-    actual_x2 = TARGET_WIDTH - int(offset_from_right_x2 * scale)
-    actual_y2 = TARGET_HEIGHT - int(offset_from_bottom_y2 * scale)
+    base_w = x2 - x1
+    base_h = y2 - y1
+    
+    # 使用现有的scale_corner_anchored函数计算坐标，确保与其他UI元素使用相同的缩放逻辑
+    actual_x1, actual_y1, actual_w, actual_h = scale_corner_anchored(x1, y1, base_w, base_h, anchor="bottom_right")
+    actual_x2 = actual_x1 + actual_w
+    actual_y2 = actual_y1 + actual_h
 
     region = (actual_x1, actual_y1, actual_x2, actual_y2)
     math_frame = scr.grab(region)
@@ -1784,7 +2056,7 @@ def toggle_run():
                 temp_scr = mss.mss()
                 scr = temp_scr  # 临时赋值供bait_math_val使用
                 bait_result = bait_math_val()
-                if bait_result or bait_result == 0:
+                if bait_result is not None:
                     previous_result = result_val_is
                     run_event.set()  # 恢复运行
                     print("▶️  [状态] 脚本开始运行")
@@ -1902,7 +2174,8 @@ def main():
                 time.sleep(0.05)
 
                 # 获取当前结果
-                if bait_math_val():
+                bait_result = bait_math_val()
+                if bait_result is not None:
                     current_result = result_val_is
                 else:
                     current_result = previous_result  # 将当前数字设为上次的数字
@@ -1930,7 +2203,7 @@ def main():
                     a = 0
 
                     # 钓到鱼后，识别并记录鱼的信息
-                    if OCR_AVAILABLE:
+                    if OCR_AVAILABLE and record_fish_enabled:
                         try:
                             record_caught_fish()
                         except Exception as e:
