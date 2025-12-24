@@ -524,6 +524,49 @@ def create_gui():
         root.iconbitmap(icon_path)
     except:
         pass
+    
+    # 响应式布局：窗口大小变化时调整钓鱼记录表格列宽
+    def on_window_resize(event):
+        """窗口大小变化时调整钓鱼记录表格列宽"""
+        if not fish_tree_ref:
+            return
+            
+        # 获取当前主窗口宽度
+        window_width = root.winfo_width()
+        
+        # 计算右侧面板的可用宽度（假设左侧面板宽度为280px，加上间距8px）
+        available_width = max(window_width - 288, 400)  # 最小400px
+        
+        # 调整比例，时间列与名称/重量列相同（时间:名称:品质:重量 = 63:63:36:63）
+        time_ratio = 63   # 时间列比例改为63，与名称/重量列一致
+        name_ratio = 63
+        quality_ratio = 36
+        weight_ratio = 63
+        total_ratio = time_ratio + name_ratio + quality_ratio + weight_ratio
+        
+        # 计算Treeview容器的可用宽度，完全跟随窗口变化
+        tree_container_width = available_width - 30  # 减去滚动条和边距
+        
+        # 严格按照比例计算各列宽度，真正实现响应式
+        time_width = int(tree_container_width * (time_ratio / total_ratio))
+        name_width = int(tree_container_width * (name_ratio / total_ratio))
+        quality_width = int(tree_container_width * (quality_ratio / total_ratio))
+        weight_width = int(tree_container_width - time_width - name_width - quality_width - 4)  # 减去4个像素的边框间距
+        
+        # 设置合理的最小宽度，确保内容能正常显示
+        time_width = max(time_width, 100)   # 时间列最小宽度
+        name_width = max(name_width, 60)    # 名称列最小宽度
+        quality_width = max(quality_width, 35)  # 品质列最小宽度
+        weight_width = max(weight_width, 60)   # 重量列最小宽度
+        
+        # 应用新列宽
+        fish_tree_ref.column("时间", width=time_width, anchor="center")
+        fish_tree_ref.column("名称", width=name_width, anchor="center")
+        fish_tree_ref.column("品质", width=quality_width, anchor="center")
+        fish_tree_ref.column("重量", width=weight_width, anchor="center")
+    
+    # 绑定窗口大小变化事件
+    root.bind("<Configure>", on_window_resize)
 
     # ==================== 主容器（固定布局，左右分栏） ====================
     main_frame = ttkb.Frame(root, padding=12)
@@ -1264,46 +1307,35 @@ def create_gui():
                 elif font_size == 200:
                     new_font_size = 24
                 
-                # print(f"字体大小设置: {font_size}%, 使用的字体大小: {new_font_size}px")
+                #print(f"字体大小设置: {font_size}%, 使用的字体大小: {new_font_size}px")
                 
                 # 根据具体的字体大小值精确计算列宽
                 # 确保在不影响外扩的情况下，调整列宽
                 # 不同字体大小对应不同的列宽
-                if new_font_size == 12:  # 100% 字体大小
-                    column_widths = {
-                        "时间": 250,  # 100%时时间列宽度
-                        "名称": 200,  # 100%时名称列宽度（调整为更窄）
-                        "品质": 140,  # 100%时品质列宽度
-                        "重量": 160   # 100%时重量列宽度
-                    }
-                elif new_font_size == 18:  # 150% 字体大小
-                    column_widths = {
-                        "时间": 320,  # 150%时时间列宽度
-                        "名称": 280,  # 150%时名称列宽度（调整为更窄）
-                        "品质": 180,  # 150%时品质列宽度
-                        "重量": 220   # 150%时重量列宽度
-                    }
-                elif new_font_size == 24:  # 200% 字体大小
-                    column_widths = {
-                        "时间": 400,  # 200%时时间列宽度
-                        "名称": 360,  # 200%时名称列宽度（调整为更窄）
-                        "品质": 240,  # 200%时品质列宽度
-                        "重量": 280   # 200%时重量列宽度
-                    }
-                else:  # 其他字体大小，使用动态计算
-                    # 基于字体大小动态计算列宽
-                    column_widths = {
-                        "时间": 200 + (new_font_size * 10),  # 时间列
-                        "名称": 160 + (new_font_size * 8),   # 名称列（调整为更窄）
-                        "品质": 100 + (new_font_size * 6),  # 品质列
-                        "重量": 120 + (new_font_size * 8)   # 重量列
-                    }
+                # 调整比例，减小时间列宽度（时间:名称:品质:重量 = 90:63:36:63）
+                # 动态计算列宽，跟随页面行宽变化
+                time_ratio = 63   # 减小时间列比例，让它更紧凑
+                name_ratio = 63
+                quality_ratio = 36
+                weight_ratio = 63
+                total_ratio = time_ratio + name_ratio + quality_ratio + weight_ratio
+                
+                # 获取当前Treeview容器宽度
+                current_container_width = fish_tree_ref.winfo_width() if fish_tree_ref else 500
+                
+                # 计算各列宽度
+                column_widths = {
+                    "时间": int(current_container_width * (time_ratio / total_ratio)),
+                    "名称": int(current_container_width * (name_ratio / total_ratio)),
+                    "品质": int(current_container_width * (quality_ratio / total_ratio)),
+                    "重量": int(current_container_width * (weight_ratio / total_ratio))
+                }
                 
                 # print(f"根据字体大小 {new_font_size}px 计算得到的列宽: {column_widths}")
                 
                 # 应用新列宽到Treeview
                 for col, width in column_widths.items():
-                    fish_tree_ref.column(col, width=width, anchor="center" if col != "名称" else "w")
+                    fish_tree_ref.column(col, width=width, anchor="center")
                 
                 # 动态调整行高，通过样式设置
                 # 计算合适的行高
@@ -1525,10 +1557,10 @@ def create_gui():
 
     # 不设置固定列宽，而是在程序初始化后调用动态调整列宽的函数
     # 初始化列宽为0，稍后会根据字体大小动态调整
-    fish_tree.column("时间", width=0, anchor="center", stretch=NO)  # 禁用自动拉伸，由我们自己控制列宽
-    fish_tree.column("名称", width=0, anchor="w", stretch=NO)      # 禁用自动拉伸，由我们自己控制列宽
-    fish_tree.column("品质", width=0, anchor="center", stretch=NO) # 禁用自动拉伸，由我们自己控制列宽
-    fish_tree.column("重量", width=0, anchor="center", stretch=NO) # 禁用自动拉伸，由我们自己控制列宽
+    fish_tree.column("时间", width=0, anchor="center", stretch=YES)  # 启用自动拉伸
+    fish_tree.column("名称", width=0, anchor="center", stretch=YES)      # 启用自动拉伸
+    fish_tree.column("品质", width=0, anchor="center", stretch=YES) # 启用自动拉伸
+    fish_tree.column("重量", width=0, anchor="center", stretch=YES) # 启用自动拉伸
 
     # 布局Treeview和滚动条
     fish_tree.pack(side=LEFT, fill=BOTH, expand=YES)
@@ -1691,12 +1723,21 @@ def create_gui():
 
     def show_restart_dialog():
         """显示需要重启软件的提示对话框"""
+        # 检查root窗口是否仍存在，避免程序退出时出错
+        if not root.winfo_exists():
+            return
+            
         # 创建自定义对话框
-        dialog = ttkb.Toplevel(root)  # 创建顶层窗口，不直接设置bootstyle
-        dialog.title("🎣 提示")  # 添加图标前缀
-        dialog.geometry("420x160")  # 调整尺寸，更宽松的布局
-        dialog.resizable(False, False)
-        dialog.grab_set()  # 模态对话框
+        try:
+            dialog = ttkb.Toplevel(root)  # 创建顶层窗口，不直接设置bootstyle
+            dialog.title("🎣 提示")  # 添加图标前缀
+            dialog.geometry("420x160")  # 调整尺寸，更宽松的布局
+            dialog.resizable(False, False)
+            dialog.grab_set()  # 模态对话框
+        except Exception as e:
+            # 捕获创建对话框可能出现的错误，特别是在程序退出时
+            print(f"⚠️ [提示] 无法显示重启对话框: {e}")
+            return
         dialog.attributes('-alpha', 0.98)  # 添加轻微透明度
         
         # 添加对话框图标，处理打包后的资源路径
@@ -1824,7 +1865,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         status_frame,
-        text="v2.4 | PartyFish",
+        text="v2.4.2 | PartyFish",
         bootstyle="light"
     )
     version_label.pack(pady=(2, 0))
@@ -1889,43 +1930,31 @@ def create_gui():
     
     print(f"初始化时使用的字体大小: {new_font_size}px")
     
-    # 根据具体的字体大小值精确计算列宽
-    if new_font_size == 12:  # 100% 字体大小
-        column_widths = {
-            "时间": 250,  # 100%时时间列宽度
-            "名称": 200,  # 100%时名称列宽度（调整为更窄）
-            "品质": 140,  # 100%时品质列宽度
-            "重量": 160   # 100%时重量列宽度
-        }
-    elif new_font_size == 18:  # 150% 字体大小
-        column_widths = {
-            "时间": 320,  # 150%时时间列宽度
-            "名称": 280,  # 150%时名称列宽度（调整为更窄）
-            "品质": 180,  # 150%时品质列宽度
-            "重量": 220   # 150%时重量列宽度
-        }
-    elif new_font_size == 24:  # 200% 字体大小
-        column_widths = {
-            "时间": 400,  # 200%时时间列宽度
-            "名称": 360,  # 200%时名称列宽度（调整为更窄）
-            "品质": 240,  # 200%时品质列宽度
-            "重量": 280   # 200%时重量列宽度
-        }
-    else:  # 其他字体大小，使用动态计算
-        # 基于字体大小动态计算列宽
-        column_widths = {
-            "时间": 200 + (new_font_size * 10),  # 时间列
-            "名称": 160 + (new_font_size * 8),   # 名称列（调整为更窄）
-            "品质": 100 + (new_font_size * 6),  # 品质列
-            "重量": 120 + (new_font_size * 8)   # 重量列
-        }
+    # 调整比例，时间列与名称/重量列相同（时间:名称:品质:重量 = 63:63:36:63）
+    # 动态计算初始列宽
+    time_ratio = 63   # 时间列比例改为63，与名称/重量列一致
+    name_ratio = 63
+    quality_ratio = 36
+    weight_ratio = 63
+    total_ratio = time_ratio + name_ratio + quality_ratio + weight_ratio
+    
+    # 初始Treeview容器宽度，使用更小的估算值，让列宽更紧凑
+    initial_container_width = 300  # 更小的初始估算宽度
+    
+    # 计算初始列宽
+    column_widths = {
+        "时间": int(initial_container_width * (time_ratio / total_ratio)),
+        "名称": int(initial_container_width * (name_ratio / total_ratio)),
+        "品质": int(initial_container_width * (quality_ratio / total_ratio)),
+        "重量": int(initial_container_width * (weight_ratio / total_ratio))
+    }
     
     print(f"初始化时计算得到的列宽: {column_widths}")
     
     # 应用新列宽到Treeview
     if fish_tree_ref:
         for col, width in column_widths.items():
-            fish_tree_ref.column(col, width=width, anchor="center" if col != "名称" else "w")
+            fish_tree_ref.column(col, width=width, anchor="center")
         
         # 初始化设置行高
         new_rowheight = int(new_font_size * 2.2)  # 行高为字体大小的2.2倍
@@ -1937,6 +1966,15 @@ def create_gui():
         
         # 强制更新Treeview布局，确保列宽和行高调整立即生效
         fish_tree_ref.update_idletasks()
+    
+    # 主动触发一次窗口大小变化事件，确保初始列宽正确设置
+    # 创建一个虚拟事件对象来传递
+    class DummyEvent:
+        def __init__(self, width):
+            self.width = width
+    
+    # 调用窗口大小变化处理函数，确保初始列宽设置正确
+    on_window_resize(DummyEvent(root.winfo_width()))
     
     # 运行 GUI
     root.mainloop()
@@ -3020,7 +3058,11 @@ def handle_jiashi_thread():
     while not begin_event.is_set():
         if run_event.is_set():
             try:
-                with mss.mss() as scr:
+                # 为每个线程创建独立的mss对象
+                scr = mss.mss()
+                
+                # 确保scr对象和_handles属性正确初始化
+                if hasattr(scr, '_handles') and hasattr(scr._handles, 'srcdc') and scr._handles.srcdc is not None:
                     # 处理加时选择（使用锁保护读取jiashi_var）
                     with param_lock:
                         current_jiashi = jiashi_var
@@ -3049,8 +3091,17 @@ def handle_jiashi_thread():
                             if bait_math_val(scr):
                                 with param_lock:
                                     previous_result = result_val_is
+                
+                # 确保资源被正确释放
+                scr.close()
             except Exception as e:
                 print(f"❌ [错误] 加时线程异常: {e}")
+                # 确保即使发生异常也能释放资源
+                try:
+                    if 'scr' in locals() and scr is not None:
+                        scr.close()
+                except:
+                    pass
         time.sleep(0.05)
 
 def main():
@@ -3144,7 +3195,7 @@ if __name__ == "__main__":
     print()
     print("╔" + "═" * 50 + "╗")
     print("║" + " " * 50 + "║")
-    print("║     🎣  PartyFish 自动钓鱼助手  v2.4             ║")
+    print("║     🎣  PartyFish 自动钓鱼助手  v2.4.2             ║")
     print("║" + " " * 50 + "║")
     print("╠" + "═" * 50 + "╣")
     print(f"║  📺 当前分辨率: {TARGET_WIDTH}×{TARGET_HEIGHT}".ljust(45)+"║")
