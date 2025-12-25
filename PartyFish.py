@@ -10,6 +10,7 @@ import ctypes
 from pynput import keyboard, mouse  # 用于监听键盘和鼠标事件，支持热键和鼠标侧键操作 
 import datetime
 import re
+import queue  # 用于线程安全通信
 
 # 过滤libpng的iCCP警告（图片ICC配置文件问题）
 warnings.filterwarnings("ignore", message=".*iCCP.*")
@@ -38,6 +39,31 @@ except ImportError:
     print("⚠️  [OCR] RapidOCR 未安装，钓鱼记录功能将不可用")
 
 # =========================
+# 调试信息管理函数
+# =========================
+def add_debug_info(info):
+    """添加调试信息到队列和历史记录"""
+    if not debug_mode:
+        return
+    
+    # 添加到队列（用于实时通知）
+    try:
+        debug_info_queue.put_nowait(info)
+    except queue.Full:
+        try:
+            debug_info_queue.get_nowait()
+            debug_info_queue.put_nowait(info)
+        except:
+            pass
+    
+    # 添加到历史记录（用于保留历史信息）
+    with debug_history_lock:
+        debug_info_history.append(info)
+        # 保持历史记录不超过200条
+        if len(debug_info_history) > 200:
+            debug_info_history.pop(0)  # 移除最旧的记录
+
+# =========================
 # 线程锁 - 保护共享变量
 # =========================
 param_lock = threading.Lock()  # 参数读写锁
@@ -56,6 +82,16 @@ preset_btns = []  # 保存预设按钮引用，用于后续字体更新
 input_entries = []  # 保存所有输入框引用，用于后续字体更新
 combo_boxes = []  # 保存所有组合框引用，用于后续字体更新
 fish_tree_ref = None  # 保存钓鱼记录Treeview引用，用于动态调整列宽
+
+# =========================
+# 调试功能设置
+# =========================
+debug_mode = True  # 调试模式开关，默认开启
+debug_info_queue = queue.Queue(maxsize=200)  # 调试信息队列，用于线程间通信
+debug_info_history = []  # 调试信息历史记录，最多保存200条
+debug_history_lock = threading.Lock()  # 保护调试历史记录的线程锁
+debug_window = None  # 调试窗口引用
+debug_auto_refresh = True  # 是否自动刷新调试信息
 
 # =========================
 # 参数文件路径
@@ -503,6 +539,389 @@ def update_parameters(t_var, leftclickdown_var, leftclickup_var, times_var, paog
             print(f"⚠️  [警告] 请输入有效的数值！错误: {e}")
         except Exception as e:
             print(f"❌ [错误] 更新参数失败: {e}")
+
+# =========================
+# 调试功能
+# =========================
+def show_debug_window():
+    """显示调试窗口，展示OCR识别的详细信息"""
+    global debug_window, debug_auto_refresh
+    
+    if debug_window is not None and debug_window.winfo_exists():
+        # 如果调试窗口已存在，先销毁它
+        debug_window.destroy()
+    
+    # 创建调试窗口
+    debug_window = ttkb.Toplevel()
+    debug_window.title("🐛 调试信息")
+    debug_window.geometry("800x600")
+    debug_window.minsize(600, 400)
+    debug_window.resizable(True, True)
+    
+    # 设置窗口图标（与主窗口相同）
+    try:
+        import sys
+        import os
+        if hasattr(sys, '_MEIPASS'):
+            icon_path = os.path.join(sys._MEIPASS, "666.ico")
+        else:
+            icon_path = "666.ico"
+        debug_window.iconbitmap(icon_path)
+    except:
+        pass
+    
+    # 主框架
+    main_frame = ttkb.Frame(debug_window, padding=12)
+    main_frame.pack(fill=BOTH, expand=YES)
+    
+    # 标题
+    title_label = ttkb.Label(main_frame, text="OCR 调试信息", font=("Segoe UI", 14, "bold"), bootstyle="primary")
+    title_label.pack(pady=(0, 10))
+    
+    # 控制框架
+    control_frame = ttkb.Frame(main_frame)
+    control_frame.pack(fill=X, pady=(0, 10))
+    
+    # 自动刷新开关
+    auto_refresh_var = ttkb.BooleanVar(value=debug_auto_refresh)
+    auto_refresh_check = ttkb.Checkbutton(
+        control_frame, 
+        text="自动刷新", 
+        variable=auto_refresh_var, 
+        bootstyle="info"
+    )
+    auto_refresh_check.pack(side=LEFT)
+    
+    def toggle_auto_refresh():
+        """切换自动刷新状态"""
+        global debug_auto_refresh
+        debug_auto_refresh = auto_refresh_var.get()
+    
+    auto_refresh_check.configure(command=toggle_auto_refresh)
+    
+    # 屏幕分辨率信息标签，显示在自动刷新右边
+    def update_resolution_label():
+        """更新分辨率信息标签"""
+        max_width, max_height = get_max_screen_resolution()
+        current_width, current_height = get_current_screen_resolution()  # 使用实际系统分辨率
+        
+        resolution_text = f"🖥️  当前分辨率: {current_width}×{current_height} | 最大分辨率: {max_width}×{max_height}\n" + \
+                          f"🖥️  缩放比例: X={SCALE_X:.2f} Y={SCALE_Y:.2f} 统一={SCALE_UNIFORM:.2f}"
+        resolution_label.configure(text=resolution_text)
+    
+    resolution_label = ttkb.Label(
+        control_frame, 
+        font=("Consolas", 10),  # 增大字体大小，提高可读性
+        bootstyle="info"
+    )
+    resolution_label.pack(side=TOP, fill=X, pady=(5, 0))  # 调整为顶部填充，增加垂直间距
+    
+    # 初始更新分辨率标签
+    update_resolution_label()
+    
+    # 手动触发OCR按钮
+    def manual_ocr_trigger():
+        """手动触发OCR识别，用于测试调试功能"""
+        temp_scr = None
+        try:
+            # 临时初始化scr对象
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "manual_ocr_start",
+                "message": "开始手动触发OCR识别，正在初始化截图对象..."
+            }
+            add_debug_info(debug_info)
+            update_debug_info()
+            
+            # 初始化mss截图对象
+            temp_scr = mss.mss()
+            
+            # 添加调试信息，记录截图对象初始化成功
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "manual_ocr_scr_init",
+                "message": "截图对象初始化成功，正在执行OCR识别...",
+                "scr_type": type(temp_scr).__name__
+            }
+            add_debug_info(debug_info)
+            update_debug_info()
+            
+            # 调用OCR识别相关函数，传入临时初始化的scr对象
+            img = capture_fish_info_region(temp_scr)
+            if img is not None:
+                fish_name, fish_quality, fish_weight = recognize_fish_info_ocr(img)
+                # 添加调试信息，通知用户手动触发成功
+                debug_info = {
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                    "action": "manual_ocr_complete",
+                    "parsed_info": {
+                        "鱼名": fish_name if fish_name else "未识别",
+                        "品质": fish_quality if fish_quality else "未识别",
+                        "重量": fish_weight if fish_weight else "未识别"
+                    },
+                    "message": "手动触发OCR识别完成",
+                    "image_shape": img.shape,
+                    "scr_type": type(temp_scr).__name__
+                }
+                add_debug_info(debug_info)
+            else:
+                # 添加调试信息，通知用户OCR识别失败
+                debug_info = {
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                    "action": "manual_ocr_failed",
+                    "message": "OCR识别失败，无法截取鱼信息区域",
+                    "scr_type": type(temp_scr).__name__
+                }
+                add_debug_info(debug_info)
+            
+            # 立即更新调试信息显示
+            update_debug_info()
+        except Exception as e:
+            # 添加错误调试信息
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "manual_ocr_error",
+                "error": f"手动触发OCR识别失败: {str(e)}",
+                "exception_type": type(e).__name__
+            }
+            add_debug_info(debug_info)
+            # 立即更新调试信息显示
+            update_debug_info()
+        finally:
+            # 确保scr对象正确关闭
+            if temp_scr is not None:
+                try:
+                    temp_scr.close()
+                    # 添加调试信息，记录截图对象关闭
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                        "action": "manual_ocr_scr_close",
+                        "message": "截图对象已关闭",
+                        "scr_type": type(temp_scr).__name__ if temp_scr is not None else "未知"
+                    }
+                    add_debug_info(debug_info)
+                    update_debug_info()
+                except Exception as close_error:
+                    # 添加错误调试信息
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                        "action": "manual_ocr_scr_close_error",
+                        "error": f"关闭截图对象失败: {str(close_error)}",
+                        "exception_type": type(close_error).__name__
+                    }
+                    add_debug_info(debug_info)
+                    update_debug_info()
+    
+    manual_ocr_btn = ttkb.Button(
+        control_frame, 
+        text="🔍 手动触发OCR", 
+        command=manual_ocr_trigger, 
+        bootstyle="primary-outline"
+    )
+    manual_ocr_btn.pack(side=RIGHT, padx=(10, 0))
+    
+    # 刷新按钮
+    refresh_btn = ttkb.Button(
+        control_frame, 
+        text="🔄 刷新", 
+        command=lambda: update_debug_info(), 
+        bootstyle="info-outline"
+    )
+    refresh_btn.pack(side=RIGHT, padx=(10, 0))
+    
+    # 调试模式开关
+    debug_mode_var = ttkb.BooleanVar(value=debug_mode)
+    debug_mode_check = ttkb.Checkbutton(
+        control_frame, 
+        text="启用调试模式", 
+        variable=debug_mode_var, 
+        bootstyle="warning"
+    )
+    debug_mode_check.pack(side=RIGHT)
+    
+    def toggle_debug_mode():
+        """切换调试模式"""
+        global debug_mode
+        debug_mode = debug_mode_var.get()
+    
+    debug_mode_check.configure(command=toggle_debug_mode)
+    
+    # 信息显示区域
+    info_frame = ttkb.Frame(main_frame)
+    info_frame.pack(fill=BOTH, expand=YES)
+    
+    # 滚动条
+    scrollbar = ttkb.Scrollbar(info_frame, orient="vertical")
+    scrollbar.pack(side=RIGHT, fill=Y)
+    
+    # 文本框
+    debug_text = tk.Text(
+        info_frame,
+        wrap="word",
+        font=("Consolas", 10),
+        bg="#1e1e1e",
+        fg="#d4d4d4",
+        insertbackground="white",
+        yscrollcommand=scrollbar.set
+    )
+    debug_text.pack(fill=BOTH, expand=YES)
+    scrollbar.configure(command=debug_text.yview)
+    
+    # 添加行号
+    debug_text.tag_configure("line_number", foreground="#606060")
+    debug_text.tag_configure("timestamp", foreground="#569cd6")
+    debug_text.tag_configure("region", foreground="#4ec9b0")
+    debug_text.tag_configure("ocr_result", foreground="#ce9178")
+    debug_text.tag_configure("parsed_info", foreground="#dcdcaa")
+    debug_text.tag_configure("error", foreground="#f48771")
+    
+    def update_debug_info():
+        """更新调试信息显示"""
+        debug_text.delete(1.0, END)
+        
+        # 显示调试模式状态
+        if not debug_mode:
+            debug_text.insert(END, "🔴 调试模式已关闭\n", "error")
+            debug_text.insert(END, "请勾选'启用调试模式'以查看OCR调试信息\n")
+            return
+        
+        # 获取屏幕分辨率信息
+        max_width, max_height = get_max_screen_resolution()
+        current_width, current_height = TARGET_WIDTH, TARGET_HEIGHT
+        
+        # 获取历史记录（线程安全）
+        with debug_history_lock:
+            # 复制当前历史记录，避免在迭代时被修改
+            debug_info_list = list(debug_info_history)
+        
+        # 显示调试模式状态和历史记录信息
+        debug_text.insert(END, "🟢 调试模式已启用\n", "timestamp")
+        debug_text.insert(END, f"📊 历史记录: 当前共有 {len(debug_info_list)} 条调试信息\n")
+        debug_text.insert(END, f"🔄 自动刷新: {'开启' if debug_auto_refresh else '关闭'}\n")
+        debug_text.insert(END, "-" * 60 + "\n")
+        
+        # 显示信息统计
+        debug_text.insert(END, f"📋 共显示 {len(debug_info_list)} 条调试信息\n", "timestamp")
+        debug_text.insert(END, "显示所有日志：\n")
+        debug_text.insert(END, "-" * 60 + "\n")
+        
+        if not debug_info_list:
+            debug_text.insert(END, "📭 暂无调试信息\n")
+            debug_text.insert(END, "等待OCR识别...\n")
+            debug_text.insert(END, "💡 提示: 点击'手动触发OCR'按钮可立即测试OCR识别\n")
+            return
+        
+        # 显示所有信息
+        for info in debug_info_list:
+            timestamp = info.get("timestamp", "未知时间")
+            region = info.get("region", {})
+            ocr_result = info.get("ocr_result", [])
+            parsed_info = info.get("parsed_info", {})
+            error = info.get("error", None)
+            action = info.get("action", "未知操作")
+            message = info.get("message", None)
+            elapse = info.get("elapse", None)
+            image_shape = info.get("image_shape", None)
+            result_count = info.get("result_count", None)
+            has_text = info.get("has_text", None)
+            exception_type = info.get("exception_type", None)
+            full_text = info.get("full_text", None)
+            
+            # 显示时间戳和操作类型
+            debug_text.insert(END, f"📅 {timestamp} | 🔧 {action}\n", "timestamp")
+            
+            # 显示自定义消息
+            if message:
+                debug_text.insert(END, f"💬 {message}\n")
+            
+            # 显示识别区域
+            if region:
+                x1, y1, x2, y2 = region.get("x1", 0), region.get("y1", 0), region.get("x2", 0), region.get("y2", 0)
+                width, height = x2 - x1, y2 - y1
+                debug_text.insert(END, f"📍 识别区域: ({x1}, {y1}) - ({x2}, {y2}) | 宽: {width}, 高: {height}\n", "region")
+            
+            # 显示图像信息
+            if image_shape:
+                debug_text.insert(END, f"🖼️ 图像尺寸: {image_shape}\n")
+            
+            # 显示识别耗时
+            if elapse is not None and isinstance(elapse, (int, float)):
+                debug_text.insert(END, f"⏱️ 识别耗时: {elapse:.3f}秒\n")
+            
+            # 显示识别结果统计
+            if result_count is not None:
+                debug_text.insert(END, f"📊 识别结果: {result_count} 行文本 | 包含有效文本: {'是' if has_text else '否'}\n")
+            
+            # 显示完整识别文本
+            if full_text:
+                debug_text.insert(END, f"📝 完整识别文本: {full_text}\n")
+            
+            # 显示OCR原始结果
+            if ocr_result:
+                debug_text.insert(END, "📋 OCR原始结果 (包含置信度):\n", "ocr_result")
+                for i, line in enumerate(ocr_result):
+                    if isinstance(line, list) and len(line) >= 2:
+                        text = line[1]
+                        confidence = line[2] if len(line) > 2 else 0
+                        # 确保置信度是数字类型
+                        if isinstance(confidence, (int, float)):
+                            debug_text.insert(END, f"   [{i+1}] {text} (置信度: {confidence:.2f})\n")
+                        else:
+                            debug_text.insert(END, f"   [{i+1}] {text} (置信度: {confidence})\n")
+                    else:
+                        debug_text.insert(END, f"   [{i+1}] {line}\n")
+            else:
+                debug_text.insert(END, "📋 OCR原始结果: 无\n", "ocr_result")
+            
+            # 显示解析后的信息
+            if parsed_info:
+                debug_text.insert(END, "🔍 解析结果:\n", "parsed_info")
+                for key, value in parsed_info.items():
+                    debug_text.insert(END, f"   {key}: {value}\n")
+            
+            # 显示错误信息
+            if error:
+                error_line = f"❌ 错误: {error}\n"
+                if exception_type:
+                    error_line += f"   异常类型: {exception_type}\n"
+                debug_text.insert(END, error_line, "error")
+            
+            debug_text.insert(END, "-" * 60 + "\n")
+        
+        # 滚动到底部
+        debug_text.see(END)
+    
+    # 定时更新
+    after_id = None
+    
+    def schedule_update():
+        """定时更新调试信息"""
+        global after_id
+        if debug_auto_refresh and debug_window is not None and debug_window.winfo_exists():
+            update_debug_info()
+            after_id = debug_window.after(1000, schedule_update)  # 每秒更新一次，保存after ID
+    
+    schedule_update()
+    
+    # 窗口关闭时的清理
+    def on_close():
+        """窗口关闭事件处理"""
+        global debug_window, after_id
+        if debug_window is not None:
+            # 先停止定时更新
+            if after_id is not None:
+                debug_window.after_cancel(after_id)
+                after_id = None
+            # 销毁窗口
+            debug_window.destroy()
+            debug_window = None
+    
+    debug_window.protocol("WM_DELETE_WINDOW", on_close)
+    
+    # 初始更新
+    update_debug_info()
+    
+    return debug_window
 
 # =========================
 # 创建 Tkinter 窗口（现代化UI设计 - 左右分栏布局）
@@ -1822,6 +2241,16 @@ def create_gui():
     )
     update_button.pack(pady=3, fill=X)
 
+    # 调试按钮
+    debug_button = ttkb.Button(
+        btn_frame,
+        text="🐛 调试",
+        command=show_debug_window,
+        bootstyle="warning-outline",
+        width=16
+    )
+    debug_button.pack(pady=3, fill=X)
+
     # ==================== 状态栏（左侧面板底部） ====================
     status_frame = ttkb.Frame(left_panel)
     status_frame.pack(fill=X, pady=(8, 0))
@@ -1838,7 +2267,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         status_frame,
-        text="v2.4.2 | PartyFish",
+        text="v2.7 | PartyFish",
         bootstyle="light"
     )
     version_label.pack(pady=(2, 0))
@@ -2218,10 +2647,29 @@ def end_current_session():
             print(f"   {emoji} {q}: {count} 条")
     current_session_id = None
 
-def capture_fish_info_region():
-    """截取鱼信息区域的图像"""
+def capture_fish_info_region(scr_param=None):
+    """截取鱼信息区域的图像
+    
+    Args:
+        scr_param: 截图对象，如果为None则使用全局scr对象
+    
+    Returns:
+        img_rgb: RGB格式的鱼信息区域图像，如果截取失败则返回None
+    """
     global scr
-    if scr is None:
+    # 优先使用传入的scr_param，如果为None则使用全局scr
+    current_scr = scr_param if scr_param is not None else scr
+    
+    if current_scr is None:
+        # 调试信息：记录错误
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "capture_error",
+                "error": "截图对象未初始化",
+                "scr_source": "传入参数" if scr_param is not None else "全局对象"
+            }
+            add_debug_info(debug_info)
         return None
 
     # 根据分辨率缩放坐标
@@ -2234,112 +2682,222 @@ def capture_fish_info_region():
     )
 
     try:
-        frame = scr.grab(region)
+        frame = current_scr.grab(region)
         if frame is None:
+            # 调试信息：记录错误
+            if debug_mode:
+                debug_info = {
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                    "region": {
+                        "x1": region[0],
+                        "y1": region[1],
+                        "x2": region[2],
+                        "y2": region[3],
+                        "width": region[2] - region[0],
+                        "height": region[3] - region[1]
+                    },
+                    "action": "capture_error",
+                    "error": "截取图像失败",
+                    "scr_source": "传入参数" if scr_param is not None else "全局对象"
+                }
+                add_debug_info(debug_info)
             return None
         img = np.array(frame)
         # 转换为RGB格式（OCR需要）
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
+        
+        # 调试信息：记录截取区域
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "region": {
+                    "x1": region[0],
+                    "y1": region[1],
+                    "x2": region[2],
+                    "y2": region[3],
+                    "width": region[2] - region[0],
+                    "height": region[3] - region[1]
+                },
+                "action": "capture_region",
+                "message": "成功截取鱼信息区域",
+                "scr_source": "传入参数" if scr_param is not None else "全局对象"
+            }
+            add_debug_info(debug_info)
+        
         return img_rgb
     except Exception as e:
         print(f"❌ [错误] 截取鱼信息区域失败: {e}")
+        # 调试信息：记录错误
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "region": {
+                    "x1": region[0],
+                    "y1": region[1],
+                    "x2": region[2],
+                    "y2": region[3],
+                    "width": region[2] - region[0],
+                    "height": region[3] - region[1]
+                },
+                "action": "capture_error",
+                "error": str(e),
+                "scr_source": "传入参数" if scr_param is not None else "全局对象"
+            }
+            add_debug_info(debug_info)
         return None
 
 def recognize_fish_info_ocr(img):
     """使用OCR识别鱼的信息"""
     if not OCR_AVAILABLE or ocr_engine is None:
+        # 调试信息：记录错误
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "ocr_error",
+                "error": "OCR引擎不可用"
+            }
+            add_debug_info(debug_info)
         return None, None, None
 
     if img is None:
+        # 调试信息：记录错误
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "ocr_error",
+                "error": "输入图像为空"
+            }
+            add_debug_info(debug_info)
         return None, None, None
 
     try:
         # 执行OCR识别
         result, elapse = ocr_engine(img)
-
-        if result is None or len(result) == 0:
-            return None, None, None
-
+        
+        # 确保result是列表类型
+        if result is None:
+            result = []
+        
         # 合并所有识别到的文本
         full_text = ""
         for line in result:
-            if len(line) >= 2:
+            if isinstance(line, list) and len(line) >= 2:
                 full_text += line[1] + " "
 
         full_text = full_text.strip()
-
-        if not full_text:
-            return None, None, None
 
         # 解析鱼的信息
         fish_name = None
         fish_quality = None
         fish_weight = None
 
-        # 识别品质
-        for quality in QUALITY_LEVELS:
-            if quality in full_text:
-                fish_quality = quality
-                break
-
-        # 识别重量（匹配数字+kg或g的模式）
-        weight_pattern = r'(\d+\.?\d*)\s*(kg|g|千克|克)?'
-        weight_matches = re.findall(weight_pattern, full_text, re.IGNORECASE)
-        if weight_matches:
-            # 取最后一个匹配的数字作为重量
-            for match in weight_matches:
-                if match[0]:
-                    fish_weight = match[0]
-                    unit = match[1].lower() if match[1] else "kg"
-                    if unit in ['g', '克']:
-                        fish_weight = str(float(fish_weight) / 1000)
-                    fish_weight = f"{float(fish_weight):.2f}kg"
-
-        # 识别鱼名 - 优先匹配"你钓到了XXX"或"首次捕获XXX"格式
-        # 使用正则表达式提取鱼名
-        fish_name_patterns = [
-            r'你钓到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',  # 你钓到了XXX
-            r'首次捕获\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',  # 首次捕获XXX
-            r'钓到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',   # 钓到了XXX
-            r'捕获\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',     # 捕获XXX
-        ]
-
-        for pattern in fish_name_patterns:
-            match = re.search(pattern, full_text)
-            if match:
-                extracted_name = match.group(1).strip()
-                # 清理鱼名中的数字、单位和特殊字符
-                extracted_name = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克)?', '', extracted_name, flags=re.IGNORECASE)
-                extracted_name = re.sub(r'[^\u4e00-\u9fa5a-zA-Z\s]', '', extracted_name)
-                extracted_name = extracted_name.strip()
-                if extracted_name and len(extracted_name) >= 2:
-                    fish_name = extracted_name
+        if len(result) > 0 and full_text:
+            # 识别品质
+            for quality in QUALITY_LEVELS:
+                if quality in full_text:
+                    fish_quality = quality
                     break
 
-        # 如果上述模式都没匹配到，尝试备用方案
-        if not fish_name:
-            name_text = full_text
-            # 移除常见前缀
-            prefixes_to_remove = ['你钓到了', '首次捕获', '钓到了', '捕获', '你钓到', '钓到']
-            for prefix in prefixes_to_remove:
-                name_text = name_text.replace(prefix, ' ')
-            # 移除品质词
-            if fish_quality:
-                name_text = name_text.replace(fish_quality, ' ')
-            # 移除数字和单位
-            name_text = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克)?', '', name_text, flags=re.IGNORECASE)
-            # 清理特殊字符，保留中文和英文
-            name_text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z]', ' ', name_text)
-            # 取最长的连续中文词作为鱼名
-            chinese_words = re.findall(r'[\u4e00-\u9fa5]{2,}', name_text)
-            if chinese_words:
-                # 选择最长的词作为鱼名
-                fish_name = max(chinese_words, key=len)
+            # 识别重量（匹配数字+kg或g的模式）
+            weight_pattern = r'(\d+\.?\d*)\s*(kg|g|千克|克)?'
+            weight_matches = re.findall(weight_pattern, full_text, re.IGNORECASE)
+            if weight_matches:
+                # 取最后一个匹配的数字作为重量
+                for match in weight_matches:
+                    if match[0]:
+                        fish_weight = match[0]
+                        unit = match[1].lower() if match[1] else "kg"
+                        if unit in ['g', '克']:
+                            fish_weight = str(float(fish_weight) / 1000)
+                        fish_weight = f"{float(fish_weight):.2f}kg"
+
+            # 识别鱼名 - 优先匹配"你钓到了XXX"或"首次捕获XXX"格式
+            # 使用正则表达式提取鱼名
+            fish_name_patterns = [
+                r'你钓到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',  # 你钓到了XXX
+                r'首次捕获\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',  # 首次捕获XXX
+                r'钓到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',   # 钓到了XXX
+                r'捕获\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',     # 捕获XXX
+            ]
+
+            for pattern in fish_name_patterns:
+                match = re.search(pattern, full_text)
+                if match:
+                    extracted_name = match.group(1).strip()
+                    # 清理鱼名中的数字、单位和特殊字符
+                    extracted_name = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克)?', '', extracted_name, flags=re.IGNORECASE)
+                    extracted_name = re.sub(r'[^\u4e00-\u9fa5a-zA-Z\s]', '', extracted_name)
+                    extracted_name = extracted_name.strip()
+                    if extracted_name and len(extracted_name) >= 2:
+                        fish_name = extracted_name
+                        break
+
+            # 如果上述模式都没匹配到，尝试备用方案
+            if not fish_name:
+                name_text = full_text
+                # 移除常见前缀
+                prefixes_to_remove = ['你钓到了', '首次捕获', '钓到了', '捕获', '你钓到', '钓到']
+                for prefix in prefixes_to_remove:
+                    name_text = name_text.replace(prefix, ' ')
+                # 移除品质词
+                if fish_quality:
+                    name_text = name_text.replace(fish_quality, ' ')
+                # 移除数字和单位
+                name_text = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克)?', '', name_text, flags=re.IGNORECASE)
+                # 清理特殊字符，保留中文和英文
+                name_text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z]', ' ', name_text)
+                # 取最长的连续中文词作为鱼名
+                chinese_words = re.findall(r'[\u4e00-\u9fa5]{2,}', name_text)
+                if chinese_words:
+                    # 选择最长的词作为鱼名
+                    fish_name = max(chinese_words, key=len)
+        
+        # 调试信息：记录OCR识别结果和详细的鱼信息识别
+        if debug_mode:
+            # 基本OCR识别结果日志
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "ocr_recognize",
+                "message": "鱼信息OCR识别完成",
+                "ocr_result": result,
+                "full_text": full_text,
+                "elapse": elapse,
+                "image_shape": img.shape if img is not None else "无图像",
+                "result_count": len(result),
+                "has_text": bool(full_text)
+            }
+            add_debug_info(debug_info)
+            
+            # 详细的鱼信息识别日志
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "fish_info_recognition_complete",
+                "message": "鱼信息识别完整流程完成",
+                "parsed_info": {
+                    "鱼名": fish_name if fish_name else "未识别",
+                    "品质": fish_quality if fish_quality else "未识别",
+                    "重量": fish_weight if fish_weight else "未识别"
+                },
+                "full_text": full_text
+            }
+            add_debug_info(debug_info)
+
+        if len(result) == 0 or not full_text:
+            return None, None, None
 
         return fish_name, fish_quality, fish_weight
 
     except Exception as e:
         print(f"❌ [错误] OCR识别失败: {e}")
+        # 调试信息：记录OCR错误
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "ocr_error",
+                "error": str(e),
+                "exception_type": type(e).__name__
+            }
+            add_debug_info(debug_info)
         return None, None, None
 
 def record_caught_fish():
@@ -2347,69 +2905,237 @@ def record_caught_fish():
     global current_session_fish, all_fish_records
     global record_fish_enabled
 
+    # 调试信息：记录函数开始执行
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "fish_record_start",
+            "message": "开始记录钓到的鱼",
+            "ocr_available": OCR_AVAILABLE,
+            "record_fish_enabled": record_fish_enabled
+        }
+        add_debug_info(debug_info)
+
     if not OCR_AVAILABLE or not record_fish_enabled:
+        # 调试信息：记录钓鱼记录开关状态
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "fish_record_check",
+                "message": "钓鱼记录未执行",
+                "reason": "OCR不可用" if not OCR_AVAILABLE else "钓鱼记录开关已关闭",
+                "ocr_available": OCR_AVAILABLE,
+                "record_fish_enabled": record_fish_enabled
+            }
+            add_debug_info(debug_info)
         return None
 
     # 等待鱼信息显示
     time.sleep(0.3)
 
+    # 调试信息：记录准备截取鱼信息区域
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "fish_record_capture_start",
+            "message": "准备截取鱼信息区域"
+        }
+        add_debug_info(debug_info)
+
     # 截取鱼信息区域
     img = capture_fish_info_region()
     if img is None:
+        # 调试信息：记录鱼信息区域截取失败
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "fish_record_capture_failed",
+                "message": "鱼信息区域截取失败"
+            }
+            add_debug_info(debug_info)
         return None
+
+    # 调试信息：记录鱼信息区域截取成功
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "fish_record_capture_success",
+            "message": "鱼信息区域截取成功",
+            "image_shape": img.shape if img is not None else "无图像"
+        }
+        add_debug_info(debug_info)
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "fish_record_ocr_start",
+            "message": "开始OCR识别鱼信息"
+        }
+        add_debug_info(debug_info)
 
     # OCR识别
     fish_name, fish_quality, fish_weight = recognize_fish_info_ocr(img)
 
+    # 调试信息：记录OCR识别结果
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "fish_record_ocr_result",
+            "message": "OCR识别完成",
+            "fish_name": fish_name,
+            "fish_quality": fish_quality,
+            "fish_weight": fish_weight,
+            "has_valid_data": fish_name is not None or fish_quality is not None or fish_weight is not None
+        }
+        add_debug_info(debug_info)
+
     if fish_name is None and fish_quality is None and fish_weight is None:
+        # 调试信息：记录OCR识别无有效数据
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "fish_record_ocr_no_data",
+                "message": "OCR识别未获取到有效鱼信息"
+            }
+            add_debug_info(debug_info)
         return None
 
-    # 创建记录
-    with fish_record_lock:
-        # 合并"传奇"和"传说"品质，统一使用"传说"
-        if fish_quality == "传奇":
-            fish_quality = "传说"
-        fish = FishRecord(fish_name, fish_quality, fish_weight)
-        current_session_fish.append(fish)
-        all_fish_records.append(fish)
-        save_fish_record(fish)
+    # 调试信息：记录开始保存记录
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "fish_record_save_start",
+            "message": "准备保存钓鱼记录",
+            "raw_fish_quality": fish_quality
+        }
+        add_debug_info(debug_info)
 
-    # 终端输出
-    quality_emoji = QUALITY_COLORS.get(fish.quality, "⚪")
-    print(f"🐟 [钓到] {quality_emoji} {fish.name} | 品质: {fish.quality} | 重量: {fish.weight}")
+    try:
+        # 创建记录
+        with fish_record_lock:
+            # 合并"传奇"和"传说"品质，统一使用"传说"
+            if fish_quality == "传奇":
+                fish_quality = "传说"
+            fish = FishRecord(fish_name, fish_quality, fish_weight)
+            current_session_fish.append(fish)
+            all_fish_records.append(fish)
+            save_fish_record(fish)
+        
+        # 调试信息：记录保存成功
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "fish_record_save_success",
+                "message": "钓鱼记录保存成功",
+                "record": {
+                    "name": fish.name,
+                    "quality": fish.quality,
+                    "weight": fish.weight,
+                    "timestamp": fish.timestamp
+                },
+                "parsed_info": {
+                    "鱼名": fish.name,
+                    "品质": fish.quality,
+                    "重量": fish.weight
+                }
+            }
+            add_debug_info(debug_info)
+        
+        # 终端输出
+        quality_emoji = QUALITY_COLORS.get(fish.quality, "⚪")
+        print(f"🐟 [钓到] {quality_emoji} {fish.name} | 品质: {fish.quality} | 重量: {fish.weight}")
 
-    # 传说/传奇鱼自动截屏
-    if legendary_screenshot_enabled and fish.quality == "传说":
-        try:
-            # 使用mss截取全屏
-            with mss.mss() as sct:
-                # 获取主显示器的尺寸
-                monitor = sct.monitors[1]  # 1 表示主显示器
-                screenshot = sct.grab(monitor)
+        # 传说/传奇鱼自动截屏
+        if legendary_screenshot_enabled and fish.quality == "传说":
+            try:
+                # 调试信息：记录开始传说鱼截屏
+                if debug_mode:
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                        "action": "fish_record_screenshot_start",
+                        "message": "开始传说鱼自动截屏"
+                    }
+                    add_debug_info(debug_info)
                 
-                # 创建截图保存目录
-                screenshot_dir = os.path.join('.', 'screenshots')
-                os.makedirs(screenshot_dir, exist_ok=True)
-                
-                # 生成截图文件名（包含时间戳和鱼名）
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                fish_name_clean = re.sub(r'[^\w\s]', '', fish.name)
-                screenshot_path = os.path.join(screenshot_dir, f"{timestamp}_{fish_name_clean}_{fish.quality}.png")
-                
-                # 保存截图
-                mss.tools.to_png(screenshot.rgb, screenshot.size, output=screenshot_path)
-                print(f"📸 [截屏] 传说鱼已自动保存: {screenshot_path}")
-        except Exception as e:
-            print(f"❌ [错误] 截图失败: {e}")
+                # 使用mss截取全屏
+                with mss.mss() as sct:
+                    # 获取主显示器的尺寸
+                    monitor = sct.monitors[1]  # 1 表示主显示器
+                    screenshot = sct.grab(monitor)
+                    
+                    # 创建截图保存目录
+                    screenshot_dir = os.path.join('.', 'screenshots')
+                    os.makedirs(screenshot_dir, exist_ok=True)
+                    
+                    # 生成截图文件名（包含时间戳和鱼名）
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    fish_name_clean = re.sub(r'[^\w\s]', '', fish.name)
+                    screenshot_path = os.path.join(screenshot_dir, f"{timestamp}_{fish_name_clean}_{fish.quality}.png")
+                    
+                    # 保存截图
+                    mss.tools.to_png(screenshot.rgb, screenshot.size, output=screenshot_path)
+                    print(f"📸 [截屏] 传说鱼已自动保存: {screenshot_path}")
+                    
+                    # 调试信息：记录传说鱼截屏成功
+                    if debug_mode:
+                        debug_info = {
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                            "action": "fish_record_screenshot_success",
+                            "message": "传说鱼自动截屏成功",
+                            "screenshot_path": screenshot_path
+                        }
+                        add_debug_info(debug_info)
+            except Exception as e:
+                print(f"❌ [错误] 截图失败: {e}")
+                # 调试信息：记录传说鱼截屏失败
+                if debug_mode:
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                        "action": "fish_record_screenshot_failed",
+                        "message": "传说鱼自动截屏失败",
+                        "error": str(e),
+                        "exception_type": type(e).__name__
+                    }
+                    add_debug_info(debug_info)
 
-    # 通知GUI更新
-    if gui_fish_update_callback:
-        try:
-            gui_fish_update_callback()
-        except:
-            pass
-
-    return fish
+        # 通知GUI更新
+        if gui_fish_update_callback:
+            try:
+                gui_fish_update_callback()
+                # 调试信息：记录GUI更新成功
+                if debug_mode:
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                        "action": "fish_record_gui_update",
+                        "message": "钓鱼记录GUI更新成功"
+                    }
+                    add_debug_info(debug_info)
+            except Exception as e:
+                # 调试信息：记录GUI更新失败
+                if debug_mode:
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                        "action": "fish_record_gui_update_failed",
+                        "message": "钓鱼记录GUI更新失败",
+                        "error": str(e),
+                        "exception_type": type(e).__name__
+                    }
+                    add_debug_info(debug_info)
+        
+        return fish
+    except Exception as e:
+        # 调试信息：记录记录保存失败
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "fish_record_save_failed",
+                "message": "钓鱼记录保存失败",
+                "error": str(e),
+                "exception_type": type(e).__name__,
+                "fish_name": fish_name,
+                "fish_quality": fish_quality,
+                "fish_weight": fish_weight
+            }
+            add_debug_info(debug_info)
+        return None
 
 def get_session_fish_list():
     """获取当前会话的钓鱼记录"""
@@ -2804,8 +3530,85 @@ def compare_results():
 BAIT_CROP_HEIGHT_BASE = 22
 BAIT_CROP_WIDTH1_BASE = 15  # 单个数字宽度
 
+# 获取电脑屏幕最大分辨率
+def get_max_screen_resolution():
+    """获取电脑屏幕的最大分辨率"""
+    try:
+        # 定义结构体
+        class DEVMODEW(ctypes.Structure):
+            _fields_ = [
+                ("dmDeviceName", ctypes.c_wchar * 32),
+                ("dmSpecVersion", ctypes.wintypes.WORD),
+                ("dmDriverVersion", ctypes.wintypes.WORD),
+                ("dmSize", ctypes.wintypes.WORD),
+                ("dmDriverExtra", ctypes.wintypes.WORD),
+                ("dmFields", ctypes.wintypes.DWORD),
+                ("dmPositionX", ctypes.wintypes.LONG),
+                ("dmPositionY", ctypes.wintypes.LONG),
+                ("dmDisplayOrientation", ctypes.wintypes.DWORD),
+                ("dmDisplayFixedOutput", ctypes.wintypes.DWORD),
+                ("dmColor", ctypes.wintypes.SHORT),
+                ("dmDuplex", ctypes.wintypes.SHORT),
+                ("dmYResolution", ctypes.wintypes.SHORT),
+                ("dmTTOption", ctypes.wintypes.SHORT),
+                ("dmCollate", ctypes.wintypes.SHORT),
+                ("dmFormName", ctypes.c_wchar * 32),
+                ("dmLogPixels", ctypes.wintypes.WORD),
+                ("dmBitsPerPel", ctypes.wintypes.DWORD),
+                ("dmPelsWidth", ctypes.wintypes.DWORD),
+                ("dmPelsHeight", ctypes.wintypes.DWORD),
+                ("dmDisplayFlags", ctypes.wintypes.DWORD),
+                ("dmDisplayFrequency", ctypes.wintypes.DWORD),
+                ("dmICMMethod", ctypes.wintypes.DWORD),
+                ("dmICMIntent", ctypes.wintypes.DWORD),
+                ("dmMediaType", ctypes.wintypes.DWORD),
+                ("dmDitherType", ctypes.wintypes.DWORD),
+                ("dmReserved1", ctypes.wintypes.DWORD),
+                ("dmReserved2", ctypes.wintypes.DWORD),
+                ("dmPanningWidth", ctypes.wintypes.DWORD),
+                ("dmPanningHeight", ctypes.wintypes.DWORD)
+            ]
+        
+        user32 = ctypes.windll.user32
+        devmode = DEVMODEW()
+        devmode.dmSize = ctypes.sizeof(DEVMODEW)
+        
+        # 尝试获取显示器的最大分辨率
+        max_width, max_height = 0, 0
+        i = 0
+        while user32.EnumDisplaySettingsW(None, i, ctypes.byref(devmode)):
+            if devmode.dmPelsWidth > max_width:
+                max_width = devmode.dmPelsWidth
+                max_height = devmode.dmPelsHeight
+            i += 1
+        
+        # 如果没有获取到，回退到当前分辨率
+        if max_width == 0 or max_height == 0:
+            max_width = user32.GetSystemMetrics(0)
+            max_height = user32.GetSystemMetrics(1)
+        
+        return max_width, max_height
+    except:
+        # 出错时回退到当前分辨率
+        try:
+            user32 = ctypes.windll.user32
+            current_width = user32.GetSystemMetrics(0)
+            current_height = user32.GetSystemMetrics(1)
+            return current_width, current_height
+        except:
+            return None, None
+
 def bait_math_val(scr):
     global  region1, region2, result_val_is
+    # 记录日志：开始鱼饵识别
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "bait_recognition_start",
+            "message": "开始识别鱼饵数量"
+        }
+        add_debug_info(debug_info)
+    
     # 鱼饵数量显示在屏幕右下角，使用锚定方式计算坐标
     x1, y1, x2, y2 = BAIT_REGION_BASE
     base_w = x2 - x1
@@ -2817,10 +3620,34 @@ def bait_math_val(scr):
     actual_y2 = actual_y1 + actual_h
 
     region = (actual_x1, actual_y1, actual_x2, actual_y2)
+    
+    # 记录日志：识别区域
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "bait_recognition_region",
+            "message": "鱼饵识别区域",
+            "region": {
+                "x1": actual_x1,
+                "y1": actual_y1,
+                "x2": actual_x2,
+                "y2": actual_y2
+            }
+        }
+        add_debug_info(debug_info)
+    
     math_frame = scr.grab(region)
     # 将 mss 截取的图像转换为 NumPy 数组 (height, width, 4)，即 RGBA 图像
     if math_frame is None:
         result_val_is = None
+        # 记录日志：识别失败
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "bait_recognition_failed",
+                "message": "无法获取鱼饵区域图像"
+            }
+            add_debug_info(debug_info)
         return None
     else:
         img = np.array(math_frame)  # screenshot 是 ScreenShot 类型，转换为 NumPy 数组
@@ -2866,6 +3693,19 @@ def bait_math_val(scr):
             result_val_is = int(f'{best_match3[0]}')
         else:
             result_val_is = None
+        
+        # 记录日志：识别结果
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "bait_recognition_result",
+                "message": "鱼饵识别完成",
+                "result": result_val_is,
+                "parsed_info": {
+                    "鱼饵数量": result_val_is if result_val_is is not None else "未识别"
+                }
+            }
+            add_debug_info(debug_info)
         return result_val_is
 
 def match_digit_template(image):
@@ -2935,6 +3775,15 @@ def shangyu_mached(scr):
     return cv2.minMaxLoc(cv2.matchTemplate(region_gray, shangyule, cv2.TM_CCOEFF_NORMED))[1] > 0.8
 def fangzhu_jiashi(scr):
     global jiashi
+    # 记录日志：开始加时识别
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "jiashi_recognition_start",
+            "message": "开始识别加时界面"
+        }
+        add_debug_info(debug_info)
+    
     # 确保模板已加载
     if jiashi is None:
         load_jiashi()
@@ -2947,10 +3796,50 @@ def fangzhu_jiashi(scr):
     actual_y = int(TARGET_HEIGHT / 2 + center_offset_y * scale)
     actual_w = int(w * scale)
     actual_h = int(h * scale)
+    
+    # 记录日志：识别区域
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "jiashi_recognition_region",
+            "message": "加时识别区域",
+            "region": {
+                "x1": actual_x,
+                "y1": actual_y,
+                "x2": actual_x + actual_w,
+                "y2": actual_y + actual_h
+            }
+        }
+        add_debug_info(debug_info)
+    
     region_gray = capture_region(actual_x, actual_y, actual_w, actual_h, scr)
     if region_gray is None:
+        # 记录日志：识别失败
+        if debug_mode:
+            debug_info = {
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                "action": "jiashi_recognition_failed",
+                "message": "无法获取加时区域图像"
+            }
+            add_debug_info(debug_info)
         return None
-    return cv2.minMaxLoc(cv2.matchTemplate(region_gray, jiashi, cv2.TM_CCOEFF_NORMED))[1] > 0.8
+    
+    result = cv2.minMaxLoc(cv2.matchTemplate(region_gray, jiashi, cv2.TM_CCOEFF_NORMED))[1] > 0.8
+    
+    # 记录日志：识别结果
+    if debug_mode:
+        debug_info = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            "action": "jiashi_recognition_result",
+            "message": "加时识别完成",
+            "result": "是" if result else "否",
+            "parsed_info": {
+                "加时界面": "已识别" if result else "未识别"
+            }
+        }
+        add_debug_info(debug_info)
+    
+    return result
 # =========================
 # 程序主循环与热键监听
 # =========================
@@ -3197,7 +4086,7 @@ if __name__ == "__main__":
     print()
     print("╔" + "═" * 50 + "╗")
     print("║" + " " * 50 + "║")
-    print("║     🎣  PartyFish 自动钓鱼助手  v2.4.2             ║")
+    print("║     🎣  PartyFish 自动钓鱼助手  v2.7             ║")
     print("║" + " " * 50 + "║")
     print("╠" + "═" * 50 + "╣")
     print(f"║  📺 当前分辨率: {CURRENT_SCREEN_WIDTH}×{CURRENT_SCREEN_HEIGHT}".ljust(45)+"║")
@@ -3239,4 +4128,12 @@ if __name__ == "__main__":
 
     # GUI必须在主线程运行（Tkinter要求）
     # 这样可以确保GUI正常工作且不会崩溃
-    create_gui()
+    try:
+        create_gui()
+    except KeyboardInterrupt:
+        # 优雅处理Ctrl+C中断，确保程序能够正常退出
+        print("\n\n┌" + "─" * 48 + "┐")
+        print("│  🛑  程序已通过Ctrl+C中断                      │")
+        print("└" + "─" * 48 + "┘")
+        # 确保所有资源都能正确释放
+        pass
