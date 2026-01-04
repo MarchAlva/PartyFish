@@ -97,7 +97,7 @@ debug_auto_refresh = True  # 是否自动刷新调试信息
 # =========================
 # 时间抖动配置
 # =========================
-JITTER_RANGE = 15  # 时间抖动范围 ±15%
+JITTER_RANGE = 0  # 时间抖动范围 ±0%
 # 保存上次操作的时间戳
 last_operation_time = None
 last_operation_type = None
@@ -570,7 +570,7 @@ def load_parameters():
             # 加载字体大小设置
             font_size = params.get("font_size", 100)  # 默认100%
             # 加载时间抖动范围
-            JITTER_RANGE = params.get("jitter_range", 15)
+            JITTER_RANGE = params.get("jitter_range", 0)
             # 加载热键设置（新格式支持组合键）
             saved_hotkey = params.get("hotkey", "F2")
             try:
@@ -1297,7 +1297,7 @@ def create_gui():
     
     # ==================== 可滚动内容区域 ====================
     # 创建滚动容器，用于放置可滚动的内容
-    scrollable_content_frame = ttkb.Frame(left_panel, width=156)  # 180 - 24 (左右边距)
+    scrollable_content_frame = ttkb.Frame(left_panel, width=300)  # 180 - 24 (左右边距)
     scrollable_content_frame.pack(fill=BOTH, expand=YES, padx=12, pady=(0, 12))
     scrollable_content_frame.pack_propagate(False)  # 防止内容改变框架宽度
     
@@ -1565,7 +1565,7 @@ def create_gui():
         return entry
 
     # 配置列宽 - 更合理的比例
-    params_card.columnconfigure(0, weight=1, minsize=100)
+    params_card.columnconfigure(0, weight=1, minsize=180)
     params_card.columnconfigure(1, weight=0, minsize=60)
 
     # 循环间隔
@@ -1630,7 +1630,7 @@ def create_gui():
     jitter_card = ttkb.Labelframe(
         left_content_frame,
         text=" 🎲 时间抖动设置 ",
-        padding=12,
+        padding=8,
         bootstyle="warning"
     )
     jitter_card.pack(fill=X, pady=(0, 8))
@@ -1640,11 +1640,11 @@ def create_gui():
     
     # 创建水平布局框架
     jitter_frame = ttkb.Frame(jitter_card)
-    jitter_frame.pack(fill=X, pady=(4, 0))
+    jitter_frame.pack(fill=X)
     
     # 时间抖动范围标签
     jitter_label = ttkb.Label(jitter_frame, text="时间抖动范围 (±%):", bootstyle="warning", font=("Segoe UI", 9))
-    jitter_label.pack(side=LEFT, padx=(0, 8))
+    jitter_label.pack(side=LEFT, padx=(0, 4))
     
     # 时间抖动滑块
     jitter_slider = ttkb.Scale(
@@ -1654,14 +1654,14 @@ def create_gui():
         orient="horizontal",
         variable=jitter_var,
         bootstyle="warning",
-        length=160,
+        length=80,
         cursor="hand2"
     )
-    jitter_slider.pack(side=LEFT, padx=8, fill=X, expand=True)
+    jitter_slider.pack(side=LEFT, padx=4, fill=X, expand=True)
     
     # 时间抖动数值显示 - 更醒目的样式
     jitter_value_label = ttkb.Label(jitter_frame, text=f"{jitter_var.get()}%", bootstyle="warning", font=("Segoe UI", 10, "bold"))
-    jitter_value_label.pack(side=LEFT, padx=(0, 4))
+    jitter_value_label.pack(side=LEFT, padx=(0, 2))
     
     # 时间抖动说明文字 - 优化样式
     jitter_info_label = ttkb.Label(
@@ -1670,7 +1670,7 @@ def create_gui():
         bootstyle="info",
         font=("Segoe UI", 8)
     )
-    jitter_info_label.pack(pady=(8, 4), padx=4)
+    jitter_info_label.pack(pady=(4, 2), padx=2)
     
     # 时间抖动滑块变化事件处理
     def on_jitter_change(*args):
@@ -1681,7 +1681,11 @@ def create_gui():
         )
         jitter_value_label.configure(text=f"{jitter_var.get()}%")
     
+    # 滑块命令事件
     jitter_slider.configure(command=on_jitter_change)
+    
+    # 变量跟踪事件（确保键盘操作也能更新显示）
+    jitter_var.trace("w", lambda *args: jitter_value_label.configure(text=f"{jitter_var.get()}%"))
 
     # ==================== 热键设置卡片 ====================
     hotkey_card = ttkb.Labelframe(
