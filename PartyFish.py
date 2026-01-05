@@ -2594,11 +2594,14 @@ def create_gui():
     # 标准-浅灰色, 非凡-清新绿, 稀有-海洋蓝, 史诗-优雅紫, 传说/传奇-尊贵金
     # 文字颜色统一为黑色，背景色使用更鲜艳的颜色
     fish_tree.tag_configure("标准", background="#FFFFFF", foreground="#000000")
+    fish_tree.tag_configure("標準", background="#FFFFFF", foreground="#000000")  # 繁体标准
     fish_tree.tag_configure("非凡", background="#2ECC71", foreground="#000000")
     fish_tree.tag_configure("稀有", background="#1E90FF", foreground="#FFFFFF")
     fish_tree.tag_configure("史诗", background="#9B59B6", foreground="#FFFFFF")
     fish_tree.tag_configure("传说", background="#F1C40F", foreground="#000000")
-    fish_tree.tag_configure("传奇", background="#F1C40F", foreground="#000000")  # 传奇与传说同色
+    fish_tree.tag_configure("傳說", background="#F1C40F", foreground="#000000")
+    fish_tree.tag_configure("传奇", background="#F1C40F", foreground="#000000")
+    fish_tree.tag_configure("傳奇", background="#F1C40F", foreground="#000000")  # 传奇与传说同色
 
     # 设置Treeview行高和字体 - 现代化设计
     # 移除background和fieldbackground设置，让标签背景色能够显示
@@ -2664,7 +2667,10 @@ def create_gui():
                 # 品质筛选
                 if quality_filter != "全部":
                     if quality_filter == "传说":
-                        if record.quality not in ["传说", "传奇"]:
+                        if record.quality not in ["传说", "传奇", "傳說", "傳奇"]:
+                            continue
+                    elif quality_filter == "标准":
+                        if record.quality not in ["标准", "標準"]:
                             continue
                     else:
                         if record.quality != quality_filter:
@@ -2744,7 +2750,7 @@ def create_gui():
             time_display = record.timestamp if record.timestamp else "未知时间"
 
             # 根据品质确定标签（用于显示颜色）
-            quality_tag = record.quality if record.quality in ["标准", "非凡", "稀有", "史诗", "传说", "传奇"] else "标准"
+            quality_tag = record.quality if record.quality in ["标准", "非凡", "稀有", "史诗", "传说", "传奇", "標準", "傳說", "傳奇"] else "标准"
 
             fish_tree.insert("", "end", values=(
                 time_display,
@@ -2874,7 +2880,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         left_status_frame,
-        text="v.2.9-beta-2 | PartyFish",
+        text="v.2.9-beta-3 | PartyFish",
         bootstyle="light",
         font=("Segoe UI", 8, "bold")
     )
@@ -3319,7 +3325,7 @@ FISH_RECORD_FILE = "./fish_records.txt"
 FISH_INFO_REGION_BASE = (915, 75, 1640, 225)  # 左上角x, y, 右下角x, y
 
 # 品质等级定义（包含"传奇"作为"传说"的别名，部分游戏版本可能使用不同名称）
-QUALITY_LEVELS = ["标准", "非凡", "稀有", "史诗", "传说", "传奇"]
+QUALITY_LEVELS = ["标准", "非凡", "稀有", "史诗", "传说", "传奇", "標準", "傳說", "傳奇"]
 # GUI专用品质列表，不包含"传奇"选项，避免在GUI筛选中显示
 GUI_QUALITY_LEVELS = ["标准", "非凡", "稀有", "史诗", "传说"]
 QUALITY_COLORS = {
@@ -3328,7 +3334,10 @@ QUALITY_COLORS = {
     "稀有": "🔵",
     "史诗": "🟣",
     "传说": "🟡",
-    "传奇": "🟡"  # 传奇与传说同级，使用相同颜色（用于兼容旧记录）
+    "传奇": "🟡",  # 传奇与传说同级，使用相同颜色（用于兼容旧记录）
+    "標準": "⚪",  # 繁体：标准
+    "傳說": "🟡",  # 繁体：传说
+    "傳奇": "🟡"   # 繁体：传奇
 }
 
 # 当前会话数据
@@ -3575,8 +3584,8 @@ def recognize_fish_info_ocr(img):
                     fish_quality = quality
                     break
 
-            # 识别重量（匹配数字+kg或g的模式）
-            weight_pattern = r'(\d+\.?\d*)\s*(kg|g|千克|克)?'
+            # 识别重量（匹配数字+kg或g的模式，支持简繁体）
+            weight_pattern = r'(\d+\.?\d*)\s*(kg|g|千克|克|公斤|KG|G)?'
             weight_matches = re.findall(weight_pattern, full_text, re.IGNORECASE)
             if weight_matches:
                 # 取最后一个匹配的数字作为重量
@@ -3584,17 +3593,17 @@ def recognize_fish_info_ocr(img):
                     if match[0]:
                         fish_weight = match[0]
                         unit = match[1].lower() if match[1] else "kg"
-                        if unit in ['g', '克']:
+                        if unit in ['g', '克', 'g']:
                             fish_weight = str(float(fish_weight) / 1000)
                         fish_weight = f"{float(fish_weight):.2f}kg"
 
-            # 识别鱼名 - 优先匹配"你钓到了XXX"或"首次捕获XXX"格式
+            # 识别鱼名 - 优先匹配"你钓到了XXX"或"首次捕获XXX"格式（支持简繁体）
             # 使用正则表达式提取鱼名
             fish_name_patterns = [
-                r'你钓到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',  # 你钓到了XXX
-                r'首次捕获\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',  # 首次捕获XXX
-                r'钓到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',   # 钓到了XXX
-                r'捕获\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:标准|非凡|稀有|史诗|传说|传奇|$)',     # 捕获XXX
+                r'你[钓釣]到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',  # 你钓到了XXX
+                r'首次捕[获獲]\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',  # 首次捕获XXX
+                r'[钓釣]到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',   # 钓到了XXX
+                r'捕[获獲]\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',     # 捕获XXX
             ]
 
             for pattern in fish_name_patterns:
@@ -3602,7 +3611,7 @@ def recognize_fish_info_ocr(img):
                 if match:
                     extracted_name = match.group(1).strip()
                     # 清理鱼名中的数字、单位和特殊字符
-                    extracted_name = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克)?', '', extracted_name, flags=re.IGNORECASE)
+                    extracted_name = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克|公斤|KG|G)?', '', extracted_name, flags=re.IGNORECASE)
                     extracted_name = re.sub(r'[^\u4e00-\u9fa5a-zA-Z\s]', '', extracted_name)
                     extracted_name = extracted_name.strip()
                     if extracted_name and len(extracted_name) >= 2:
@@ -3612,8 +3621,8 @@ def recognize_fish_info_ocr(img):
             # 如果上述模式都没匹配到，尝试备用方案
             if not fish_name:
                 name_text = full_text
-                # 移除常见前缀
-                prefixes_to_remove = ['你钓到了', '首次捕获', '钓到了', '捕获', '你钓到', '钓到']
+                # 移除常见前缀（支持简繁体）
+                prefixes_to_remove = ['你钓到了', '你釣到了', '首次捕获', '首次捕獲', '钓到了', '釣到了', '捕获', '捕獲', '你钓到', '你釣到', '钓到', '釣到']
                 for prefix in prefixes_to_remove:
                     name_text = name_text.replace(prefix, ' ')
                 # 移除品质词
@@ -3788,8 +3797,8 @@ def record_caught_fish():
     try:
         # 创建记录
         with fish_record_lock:
-            # 合并"传奇"和"传说"品质，统一使用"传说"
-            if fish_quality == "传奇":
+            # 合并"传奇"和"传说"品质，统一使用"传说"（包含繁体）
+            if fish_quality in ["传奇", "傳奇", "傳說"]:
                 fish_quality = "传说"
             fish = FishRecord(fish_name, fish_quality, fish_weight)
             current_session_fish.append(fish)
@@ -3821,7 +3830,7 @@ def record_caught_fish():
         print(f"🐟 [钓到] {quality_emoji} {fish.name} | 品质: {fish.quality} | 重量: {fish.weight}")
 
         # 传说/传奇鱼自动截屏
-        if legendary_screenshot_enabled and fish.quality == "传说":
+        if legendary_screenshot_enabled and fish.quality in ["传说", "传奇", "傳說", "傳奇"]:
             try:
                 # 调试信息：记录开始传说鱼截屏
                 if debug_mode:
@@ -3834,12 +3843,27 @@ def record_caught_fish():
                 
                 # 使用mss截取主显示器全屏
                 with mss.mss() as sct:
-                    # 明确指定使用主显示器（索引1）
-                    monitor = sct.monitors[1]  # 1 表示主显示器，0表示所有显示器组合
-                    print(f"📌 [调试] 当前显示器配置: {len(sct.monitors)}个显示器，使用主显示器: {monitor}")
+                    # 调试：打印所有显示器信息
+                    print(f"📌 [调试] 所有显示器配置: {sct.monitors}")
+                    print(f"📌 [调试] 显示器数量: {len(sct.monitors)}个")
                     
-                    # 强制使用主显示器进行截屏
-                    screenshot = sct.grab(monitor)
+                    # 选择主显示器 - 通常index 1是主显示器，但有些系统可能不同
+                    # 主显示器通常具有最小的left和top值（0,0坐标）
+                    main_monitor = None
+                    for i, monitor in enumerate(sct.monitors[1:]):  # 跳过index 0（所有显示器组合）
+                        print(f"📌 [调试] 显示器{i+1}: {monitor}")
+                        if monitor["left"] == 0 and monitor["top"] == 0:
+                            main_monitor = monitor
+                            print(f"📌 [调试] 找到主显示器（坐标0,0）: 显示器{i+1}")
+                            break
+                    
+                    # 如果找不到坐标0,0的显示器，使用默认的index 1
+                    if main_monitor is None:
+                        main_monitor = sct.monitors[1]
+                        print(f"📌 [调试] 未找到坐标0,0的显示器，使用默认显示器1: {main_monitor}")
+                    
+                    # 强制使用确定的主显示器进行截屏
+                    screenshot = sct.grab(main_monitor)
                     
                     # 创建截图保存目录
                     screenshot_dir = os.path.join('.', 'screenshots')
@@ -3935,11 +3959,15 @@ def search_fish_records(keyword="", quality_filter="全部", use_session=True):
 
         filtered = []
         for record in records:
-            # 品质筛选 - 合并"传说"和"传奇"
+            # 品质筛选 - 合并"传说"和"传奇"，以及"标准"和"標準"
             if quality_filter != "全部":
                 if quality_filter == "传说":
                     # 筛选传说时也包含传奇
-                    if record.quality not in ["传说", "传奇"]:
+                    if record.quality not in ["传说", "传奇", "傳說", "傳奇"]:
+                        continue
+                elif quality_filter == "标准":
+                    # 筛选标准时也包含繁体標準
+                    if record.quality not in ["标准", "標準"]:
                         continue
                 else:
                     # 其他品质正常筛选
@@ -5005,7 +5033,7 @@ if __name__ == "__main__":
     print()
     print("╔" + "═" * 50 + "╗")
     print("║" + " " * 50 + "║")
-    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9-beta-2".ljust(44)+"║")
+    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9-beta-3".ljust(44)+"║")
     print("║" + " " * 50 + "║")
     print("╠" + "═" * 50 + "╣")
     print(f"║  📺 当前分辨率: {CURRENT_SCREEN_WIDTH}×{CURRENT_SCREEN_HEIGHT}".ljust(45)+"║")
