@@ -3934,13 +3934,8 @@ def recognize_fish_info_ocr(img):
                         fish_weight = f"{float(fish_weight):.2f}kg"
 
             # 识别鱼名 - 优先匹配"你钓到了XXX"或"首次捕获XXX"格式（支持简繁体）
-            # 使用正则表达式提取鱼名
-            fish_name_patterns = [
-                r'你[钓釣]到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',  # 你钓到了XXX
-                r'首次捕[获獲]\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',  # 首次捕获XXX
-                r'[钓釣]到了\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',   # 钓到了XXX
-                r'捕[获獲]\s*[「【\[]?\s*(.+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)',     # 捕获XXX
-            ]
+            # 优化正则表达式，移除重复的品质词匹配
+            fish_name_pattern = r'(?:你[钓釣]到了|首次捕[获獲]|[钓釣]到了|捕[获獲])\s*[「【\[]?\s*([^「」【】\[\]]+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)'
 
             for pattern in fish_name_patterns:
                 match = re.search(pattern, full_text)
@@ -3961,11 +3956,11 @@ def recognize_fish_info_ocr(img):
                 prefixes_to_remove = ['你钓到了', '你釣到了', '首次捕获', '首次捕獲', '钓到了', '釣到了', '捕获', '捕獲', '你钓到', '你釣到', '钓到', '釣到']
                 for prefix in prefixes_to_remove:
                     name_text = name_text.replace(prefix, ' ')
-                # 移除品质词
-                if fish_quality:
-                    name_text = name_text.replace(fish_quality, ' ')
+                # 移除所有品质词
+                for quality in QUALITY_LEVELS:
+                    name_text = name_text.replace(quality, ' ')
                 # 移除数字和单位
-                name_text = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克)?', '', name_text, flags=re.IGNORECASE)
+                name_text = re.sub(r'\d+\.?\d*\s*(kg|g|千克|克|公斤|KG|G)?', '', name_text, flags=re.IGNORECASE)
                 # 清理特殊字符，保留中文和英文
                 name_text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z]', ' ', name_text)
                 # 取最长的连续中文词作为鱼名
@@ -4491,6 +4486,29 @@ def parse_hotkey_string(hotkey_str):
             # 检查是否是特殊键
             if part in NAME_TO_KEY:
                 main_key = NAME_TO_KEY[part]
+            # 检查是否是数字小键盘按键
+            elif part.startswith("Num"):
+                num_part = part[3:]
+                if num_part.isdigit():
+                    # 数字小键盘数字键（0-9）
+                    num = int(num_part)
+                    if 0 <= num <= 9:
+                        main_key = keyboard.KeyCode(vk=96 + num)
+                elif num_part == ".":
+                    # 数字小键盘小数点
+                    main_key = keyboard.KeyCode(vk=110)
+                elif num_part == "*":
+                    # 数字小键盘乘号
+                    main_key = keyboard.KeyCode(vk=106)
+                elif num_part == "+":
+                    # 数字小键盘加号
+                    main_key = keyboard.KeyCode(vk=107)
+                elif num_part == "-":
+                    # 数字小键盘减号
+                    main_key = keyboard.KeyCode(vk=109)
+                elif num_part == "/":
+                    # 数字小键盘除号
+                    main_key = keyboard.KeyCode(vk=111)
             elif len(part) == 1:
                 # 单个字符键
                 main_key = keyboard.KeyCode.from_char(part.lower())
@@ -5182,6 +5200,10 @@ def check_hotkey_match(key):
     # 直接比较按键对象
     if key == hotkey_main_key:
         main_key_match = True
+    # 虚拟键码比较
+    elif hasattr(key, 'vk') and hasattr(hotkey_main_key, 'vk'):
+        if key.vk is not None and hotkey_main_key.vk is not None:
+            main_key_match = (key.vk == hotkey_main_key.vk)
     # 字符键比较（忽略大小写）
     elif hasattr(key, 'char') and hasattr(hotkey_main_key, 'char'):
         if key.char and hotkey_main_key.char:
