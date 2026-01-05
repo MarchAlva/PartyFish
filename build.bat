@@ -3,7 +3,7 @@ echo 正在打包 PartyFish...
 
 pyinstaller --noconfirm ^
     --name "PartyFish" ^
-    --console ^
+    --windowed ^
     --icon "666.ico" ^
     --add-data "resources;resources" ^
     --collect-data rapidocr_onnxruntime ^
