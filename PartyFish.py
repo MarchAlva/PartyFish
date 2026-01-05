@@ -3933,9 +3933,12 @@ def recognize_fish_info_ocr(img):
                             fish_weight = str(float(fish_weight) / 1000)
                         fish_weight = f"{float(fish_weight):.2f}kg"
 
+
             # 识别鱼名 - 优先匹配"你钓到了XXX"或"首次捕获XXX"格式（支持简繁体）
             # 优化正则表达式，移除重复的品质词匹配
-            fish_name_pattern = r'(?:你[钓釣]到了|首次捕[获獲]|[钓釣]到了|捕[获獲])\s*[「【\[]?\s*([^「」【】\[\]]+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)'
+            fish_name_patterns = [
+             r'(?:你[钓釣]到了|首次捕[获獲]|[钓釣]到了|捕[获獲])\s*[「【\[]?\s*([^「」【】\[\]]+?)\s*[」】\]]?\s*(?:[标標]准|非凡|稀有|史诗|传说|傳說|传奇|傳奇|$)'
+            ]
 
             for pattern in fish_name_patterns:
                 match = re.search(pattern, full_text)
