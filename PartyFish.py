@@ -6165,6 +6165,12 @@ def toggle_run():
         ensure_mouse_up()  # 确保鼠标没有按下
         end_current_session()  # 结束钓鱼会话
         print("⏸️  [状态] 脚本已暂停")
+        # 播放暂停提示音（叮一声）
+        try:
+            import winsound
+            winsound.Beep(1000, 200)  # 频率1000Hz，持续200ms，模拟叮的声音
+        except:
+            pass
     else:
         # 重置鱼桶满检测状态
         reset_fish_bucket_full_detection()
@@ -6179,6 +6185,12 @@ def toggle_run():
                     previous_result = result_val_is
                     run_event.set()  # 恢复运行
                     print("▶️  [状态] 脚本开始运行")
+                    # 播放开始提示音（叮一声）
+                    try:
+                        import winsound
+                        winsound.Beep(1500, 200)  # 频率1500Hz，持续200ms，模拟叮的声音
+                    except:
+                        pass
                 else:
                     time.sleep(0.1)
                     print("⚠️  [警告] 未识别到鱼饵，请确保游戏界面正确")
@@ -6194,6 +6206,12 @@ def toggle_run():
         else:
             run_event.set()
             print("▶️  [状态] 脚本继续运行")
+            # 播放继续提示音（叮一声）
+            try:
+                import winsound
+                winsound.Beep(1500, 200)  # 频率1500Hz，持续200ms，模拟叮的声音
+            except:
+                pass
 
 
 def on_press(key):
