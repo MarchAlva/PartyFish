@@ -27,6 +27,55 @@ import json  # 用于保存和加载参数
 import mss
 
 # =========================
+# 全局图标管理
+# =========================
+def get_icon_path():
+    """获取666.ico图标的路径，处理不同环境下的路径问题
+    
+    Returns:
+        str: 666.ico图标的完整路径
+    """
+    import sys
+    import os
+    
+    if hasattr(sys, "_MEIPASS"):
+        # 打包后使用_internal目录
+        icon_path = os.path.join(sys._MEIPASS, "_internal", "666.ico")
+        # 如果_internal目录不存在，尝试直接在MEIPASS下查找
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(sys._MEIPASS, "666.ico")
+    else:
+        # 开发环境下直接使用当前目录
+        icon_path = "666.ico"
+    
+    return icon_path
+
+def set_window_icon(window):
+    """设置窗口图标，同时支持窗口和任务栏
+    
+    Args:
+        window: 要设置图标的窗口对象
+    """
+    try:
+        import tkinter as tk
+        
+        # 获取图标路径
+        icon_path = get_icon_path()
+        
+        # 尝试使用iconphoto方法设置图标（同时支持窗口和任务栏）
+        try:
+            icon = tk.PhotoImage(file=icon_path)
+            window.iconphoto(True, icon)
+        except Exception as e1:
+            # 如果iconphoto失败，尝试回退到iconbitmap
+            try:
+                window.iconbitmap(icon_path)
+            except Exception as e2:
+                print(f"⚠️  [警告] 设置窗口图标失败: {e2}")
+    except Exception as e:
+        print(f"⚠️  [警告] 设置窗口图标时发生错误: {e}")
+
+# =========================
 # OCR引擎初始化（使用rapidocr，速度快）
 # =========================
 try:
@@ -44,10 +93,21 @@ except ImportError:
 # 鱼桶满检测设置
 # =========================
 FISH_BUCKET_FULL_TEXT = "鱼桶满了，无法钓鱼"
-FISH_BUCKET_FULL_REGION_BASE = (915, 230, 1640, 280)  # 鱼桶满提示区域，在鱼信息区域下方
-fish_bucket_full_region_coords = None
 fish_bucket_full_detected = False
-fish_bucket_sound_enabled = True  # 是否启用鱼桶满音效
+fish_bucket_sound_enabled = True  # 是否启用鱼桶满/没鱼饵警告!音效
+
+# 鱼桶满/没鱼饵！检测模式
+# mode1: 自动暂停
+# mode2: 按下一次F键然后一直鼠标左键，但检测到键盘活动时自动停止
+# mode3: 不会自动暂停，只会按下一次F键
+bucket_detection_mode = "mode1"  # 默认模式
+
+# 抛竿间隔检测相关设置
+casting_timestamps = []  # 存储最近的抛竿时间戳
+casting_interval_lock = threading.Lock()  # 保护抛竿时间戳的线程锁
+CASTING_INTERVAL_THRESHOLD = 0.15  # 抛竿间隔阈值（秒）
+REQUIRED_CONSECUTIVE_MATCHES = 4  # 需要连续匹配的次数
+bucket_full_by_interval = False  # 标记是否通过间隔检测到鱼桶满/没鱼饵！
 # =========================
 # 调试信息管理函数
 # =========================
@@ -149,7 +209,7 @@ legendary_screenshot_enabled = True  # 默认关闭传奇鱼自动截屏
 # 字体大小设置
 # =========================
 font_size = 100  # 默认字体大小
-preset_btns = []  # 保存预设按钮引用，用于后续字体更新
+
 input_entries = []  # 保存所有输入框引用，用于后续字体更新
 combo_boxes = []  # 保存所有组合框引用，用于后续字体更新
 fish_tree_ref = None  # 保存钓鱼记录Treeview引用，用于动态调整列宽
@@ -617,7 +677,8 @@ def save_parameters():
         "legendary_screenshot_enabled": legendary_screenshot_enabled,
         "font_size": font_size,
         "jitter_range": JITTER_RANGE,
-        "fish_bucket_sound_enabled": fish_bucket_sound_enabled # 新增保存鱼桶音效开关状态
+        "fish_bucket_sound_enabled": fish_bucket_sound_enabled,
+        "bucket_detection_mode": bucket_detection_mode # 新增保存鱼桶检测模式
     }
 
     try:
@@ -630,7 +691,7 @@ def save_parameters():
 
 def load_parameters():
     """从文件加载参数"""
-    global fish_bucket_sound_enabled # 新增加载鱼桶满音效开关状态
+    global fish_bucket_sound_enabled, bucket_detection_mode # 新增加载鱼桶满/没鱼饵警告!音效开关状态和检测模式
     global t, leftclickdown, leftclickup, times, paogantime, jiashi_var
     global resolution_choice, TARGET_WIDTH, TARGET_HEIGHT, SCALE_X, SCALE_Y
     global hotkey_name, hotkey_modifiers, hotkey_main_key
@@ -671,8 +732,10 @@ def load_parameters():
             font_size = params.get("font_size", 100)  # 默认100%
             # 加载时间抖动范围
             JITTER_RANGE = params.get("jitter_range", 0)
-            # 加载鱼桶满音效开关状态
+            # 加载鱼桶满/没鱼饵！音效开关状态
             fish_bucket_sound_enabled = params.get("fish_bucket_sound_enabled", True)
+            # 加载鱼桶检测模式
+            bucket_detection_mode = params.get("bucket_detection_mode", "mode1")
             # 加载热键设置（新格式支持组合键）
             saved_hotkey = params.get("hotkey", "F2")
             try:
@@ -938,29 +1001,7 @@ def show_debug_window():
     debug_window.resizable(True, True)
 
     # 设置窗口图标（与主窗口相同）
-    try:
-        import sys
-        import os
-        import tkinter as tk
-
-        if hasattr(sys, "_MEIPASS"):
-            # 打包后使用_internal目录
-            icon_path = os.path.join(sys._MEIPASS, "_internal", "666.ico")
-            # 如果_internal目录不存在，尝试直接在MEIPASS下查找
-            if not os.path.exists(icon_path):
-                icon_path = os.path.join(sys._MEIPASS, "666.ico")
-        else:
-            icon_path = "666.ico"
-
-        # 使用iconphoto方法设置图标，同时支持窗口和任务栏图标
-        icon = tk.PhotoImage(file=icon_path)
-        debug_window.iconphoto(True, icon)
-    except Exception as e:
-        # 如果iconphoto失败，尝试回退到iconbitmap
-        try:
-            debug_window.iconbitmap(icon_path)
-        except:
-            pass
+    set_window_icon(debug_window)
 
     # 主框架
     main_frame = ttkb.Frame(debug_window, padding=12)
@@ -1133,6 +1174,15 @@ def show_debug_window():
         bootstyle="primary-outline",
     )
     manual_ocr_btn.pack(side=RIGHT, padx=(10, 0))
+
+    # 测试警告音效按钮
+    test_sound_btn = ttkb.Button(
+        control_frame,
+        text="🔊 测试警告音效",
+        command=play_fish_bucket_warning_sound,
+        bootstyle="warning-outline",
+    )
+    test_sound_btn.pack(side=RIGHT, padx=(10, 0))
 
     # 刷新按钮
     refresh_btn = ttkb.Button(
@@ -1462,31 +1512,7 @@ def create_gui():
     root.resizable(True, True)  # 允许调整大小
 
     # 设置窗口图标（如果有的话）
-    try:
-        import sys
-        import os
-        import tkinter as tk
-
-        # 处理PyInstaller打包后的资源路径
-        if hasattr(sys, "_MEIPASS"):
-            # 打包后使用_internal目录
-            icon_path = os.path.join(sys._MEIPASS, "_internal", "666.ico")
-            # 如果_internal目录不存在，尝试直接在MEIPASS下查找
-            if not os.path.exists(icon_path):
-                icon_path = os.path.join(sys._MEIPASS, "666.ico")
-        else:
-            # 开发环境使用当前目录
-            icon_path = "666.ico"
-
-        # 使用iconphoto方法设置图标，同时支持窗口和任务栏图标
-        icon = tk.PhotoImage(file=icon_path)
-        root.iconphoto(True, icon)  # True表示同时设置窗口和任务栏图标
-    except Exception as e:
-        # 如果iconphoto失败，尝试回退到iconbitmap
-        try:
-            root.iconbitmap(icon_path)
-        except:
-            pass
+    set_window_icon(root)
 
     # 响应式布局：窗口大小变化时调整布局
     def on_window_resize(event):
@@ -2002,7 +2028,7 @@ def create_gui():
     # ==================== 鱼桶满检测设置卡片 ====================
     bucket_card = ttkb.Labelframe(
     left_content_frame,
-    text=" 🪣 鱼桶满检测 ",
+    text=" 🪣 鱼桶满了/没鱼饵了检测 ",
     padding=12,
     bootstyle="warning"
     )
@@ -2013,25 +2039,78 @@ def create_gui():
     fish_bucket_sound_var = ttkb.BooleanVar(value=fish_bucket_sound_enabled)
     fish_bucket_sound_check = ttkb.Checkbutton(
     bucket_card,
-    text="启用鱼桶满警告音效",
+    text="启用鱼桶满了/没鱼饵警告音效",
     variable=fish_bucket_sound_var,
     bootstyle="warning"
     )
     fish_bucket_sound_check.pack(anchor=W, pady=(0, 4))
 
     def toggle_fish_bucket_sound():
-        """切换鱼桶满音效开关"""
+        """切换鱼桶满了/没鱼饵警告音效开关"""
         global fish_bucket_sound_enabled
-    fish_bucket_sound_enabled = fish_bucket_sound_var.get()
-    # 保存设置
-    save_parameters()
+        fish_bucket_sound_enabled = fish_bucket_sound_var.get()
+        # 保存设置
+        save_parameters()
 
     fish_bucket_sound_check.configure(command=toggle_fish_bucket_sound)
+
+    # 运行模式选择
+    global bucket_detection_mode
+    bucket_mode_var = ttkb.StringVar(value=bucket_detection_mode)
+    
+    mode_frame = ttkb.Frame(bucket_card)
+    mode_frame.pack(fill=X, pady=(8, 0))
+    
+    ttkb.Label(mode_frame, text="运行模式:", bootstyle="warning", font=("Segoe UI", 9, "bold")).pack(anchor=W, pady=(0, 4))
+    
+    # 水平框架用于放置单选按钮
+    rb_frame = ttkb.Frame(mode_frame)
+    rb_frame.pack(fill=X, pady=(0, 4))
+    
+    # 模式1：自动暂停
+    mode1_rb = ttkb.Radiobutton(
+        rb_frame,
+        text="1.自动暂停",
+        variable=bucket_mode_var,
+        value="mode1",
+        bootstyle="warning"
+    )
+    mode1_rb.pack(side=LEFT, padx=(0, 15))
+    
+    # 模式2：F键+左键模式
+    mode2_rb = ttkb.Radiobutton(
+        rb_frame,
+        text="2.自动挂机",
+        variable=bucket_mode_var,
+        value="mode2",
+        bootstyle="warning"
+    )
+    mode2_rb.pack(side=LEFT, padx=(0, 15))
+    
+    # 模式3：仅F键模式
+    mode3_rb = ttkb.Radiobutton(
+        rb_frame,
+        text="3.收杆模式",
+        variable=bucket_mode_var,
+        value="mode3",
+        bootstyle="warning"
+    )
+    mode3_rb.pack(side=LEFT)
+    
+    def on_bucket_mode_change():
+        """切换鱼桶满检测模式"""
+        global bucket_detection_mode
+        bucket_detection_mode = bucket_mode_var.get()
+        # 保存设置
+        save_parameters()
+    
+    # 绑定模式变化事件
+    bucket_mode_var.trace_add("write", lambda *args: on_bucket_mode_change())
 
     # 说明文字
     info_label = ttkb.Label(
     bucket_card,
-    text="当检测到'鱼桶满了'时自动停止脚本并播放音效",
+    text="当检测到时根据选择的模式执行相应操作",
     bootstyle="info",
     font=("Segoe UI", 8)
     )
@@ -2516,250 +2595,21 @@ def create_gui():
     )
     legendary_no.pack(side=LEFT, padx=5)
 
-    # ==================== 字体大小设置卡片 ====================
-    font_size_card = ttkb.Labelframe(
-        left_content_frame, text=" 📝 字体大小设置 ", padding=12, bootstyle="info"
-    )
-    font_size_card.pack(fill=X, pady=(0, 8))
 
-    # 字体大小变量
-    font_size_var = ttkb.IntVar(value=font_size)
 
-    # 字体大小滑块 - 优化样式
-    font_slider = ttkb.Scale(
-        font_size_card,
-        from_=50,
-        to=200,
-        orient="horizontal",
-        variable=font_size_var,
-        bootstyle="info",  # 使用标准样式
-        length=180,  # 优化滑块长度
-        cursor="hand2",  # 鼠标悬停时显示手型光标
-    )
-    font_slider.pack(pady=(8, 8))
 
-    # 字体大小显示标签 - 美化显示
-    font_size_display = ttkb.Label(
-        font_size_card,
-        text=f"当前字体大小: {font_size}%",
-        bootstyle="primary",  # 使用更醒目的样式
-        font=("Segoe UI", 10, "bold"),  # 加粗字体
-    )
-    font_size_display.pack(pady=(0, 8))
 
-    # 预设按钮框架 - 使用网格布局
-    preset_frame = ttkb.Frame(font_size_card)
-    preset_frame.pack(fill=X, pady=(0, 8))
 
-    # 配置网格布局
-    preset_frame.columnconfigure(0, weight=1)
-    preset_frame.columnconfigure(1, weight=1)
 
-    # 字体大小预设配置 - 简化文本，适合大字体显示
-    font_presets = [
-        ("小 (50%)", 50),  # 50% 字体大小
-        ("中 (100%)", 100),  # 100% 字体大小
-        ("大 (150%)", 150),  # 150% 字体大小
-        ("特大 (200%)", 200),  # 200% 字体大小
-    ]
 
-    # 保存预设按钮引用的字典，用于更新选中状态
-    preset_button_dict = {}
 
-    # 预设按钮点击处理
-    def set_font_size(value):
-        font_size_var.set(value)
-        update_font_size()
-        # 更新预设按钮的选中状态
-        update_preset_button_state()
 
-    # 更新预设按钮状态
-    def update_preset_button_state():
-        current_size = font_size_var.get()
-        for text, size in font_presets:
-            btn = preset_button_dict[size]
-            if size == current_size:
-                # 当前选中的预设，使用填充样式
-                btn.configure(bootstyle="info")
-            else:
-                # 未选中的预设，使用轮廓样式
-                btn.configure(bootstyle="info-outline")
 
-    # 创建预设按钮，网格布局
-    for i, (text, size) in enumerate(font_presets):
-        # 计算网格位置
-        row = i // 2
-        col = i % 2
 
-        preset_btn = ttkb.Button(
-            preset_frame,
-            text=text,
-            command=lambda v=size: set_font_size(v),
-            bootstyle="info-outline",  # 默认轮廓样式
-            width=10,  # 合适的按钮宽度
-            padding=(3, 2),  # 优化内边距，更紧凑
-            cursor="hand2",  # 鼠标悬停时显示手型光标
-        )
-        # 网格布局，每行两个按钮
-        preset_btn.grid(row=row, column=col, padx=2, pady=2, sticky="ew")
 
-        # 保存按钮引用
-        preset_button_dict[size] = preset_btn
-        preset_btns.append(preset_btn)
 
-    # 初始化预设按钮状态
-    update_preset_button_state()
 
-    # 字体大小应用按钮
-    apply_font_btn = ttkb.Button(
-        font_size_card,
-        text="应用",
-        command=lambda: update_font_size(),
-        bootstyle="success-outline",
-    )
-    apply_font_btn.pack(fill=X, pady=(0, 4))
 
-    # 定义字体大小更新函数
-    def update_font_size():
-        global font_size
-        font_size = font_size_var.get()
-        font_size_display.config(text=f"当前字体大小: {font_size}%")
-        # 保存字体大小到参数文件
-        save_parameters()
-
-        # 更新预设按钮状态，确保滑块和按钮状态一致
-        update_preset_button_state()
-
-        # 计算新字体大小和缩放因子
-        scale_factor = font_size / 100.0
-        base_font = "Segoe UI"
-        entry_font_size = max(5, min(30, int(9 * scale_factor)))
-        new_font = (base_font, entry_font_size)
-
-        # 直接更新所有输入框的字体
-        for entry in input_entries:
-            try:
-                # 尝试直接更新字体
-                entry.configure(font=new_font)
-            except Exception as e:
-                # 如果直接更新失败，确保样式已经更新
-                # 通过修改样式对象来更新所有输入框
-                style.configure("TEntry", font=new_font)
-                style.configure("Entry", font=new_font)
-
-        # 直接更新所有组合框的字体和宽度（包括品质筛选组合框）
-        for i, combo in enumerate(combo_boxes):
-            try:
-                # 尝试直接更新字体
-                combo.configure(font=new_font)
-
-                # 计算新的组合框宽度，根据字体大小动态调整
-                # 基础宽度为8，根据缩放因子调整
-                base_combo_width = 8
-                new_combo_width = max(6, int(base_combo_width * scale_factor))
-                combo.configure(width=new_combo_width)
-            except Exception as e:
-                # 如果直接更新失败，确保样式已经更新
-                # 通过修改样式对象来更新所有组合框
-                style.configure("TCombobox", font=new_font)
-                style.configure("Combobox", font=new_font)
-                # 更新组合框下拉列表的字体（同时支持标准TTK和TTKBootstrap）
-                style.configure("TCombobox.Listbox", font=new_font)
-                style.configure("Combobox.Listbox", font=new_font)
-
-        # 应用字体大小到所有界面元素
-        update_all_widget_fonts(root, style, font_size)
-
-        # 动态调整Treeview列宽，根据字体大小缩放
-        if fish_tree_ref:
-            try:
-                # 计算新的字体大小（像素单位）
-                # 确保字体大小按照要求计算：
-                # - 100% 时为 12px
-                # - 150% 时为 18px
-                # - 200% 时为 24px
-                base_font_size = 12  # 基础字体大小为12px（100%时）
-                new_font_size = int(base_font_size * scale_factor)
-
-                # 精确调整字体大小，确保符合要求
-                if font_size == 100:
-                    new_font_size = 12
-                elif font_size == 150:
-                    new_font_size = 18
-                elif font_size == 200:
-                    new_font_size = 24
-
-                # print(f"字体大小设置: {font_size}%, 使用的字体大小: {new_font_size}px")
-
-                # 根据具体的字体大小值精确计算列宽
-                # 确保在不影响外扩的情况下，调整列宽
-                # 不同字体大小对应不同的列宽
-                # 调整比例，减小时间列宽度（时间:名称:品质:重量 = 90:63:36:63）
-                # 动态计算列宽，跟随页面行宽变化
-                time_ratio = 63  # 减小时间列比例，让它更紧凑
-                name_ratio = 63
-                quality_ratio = 36
-                weight_ratio = 63
-                total_ratio = time_ratio + name_ratio + quality_ratio + weight_ratio
-
-                # 获取当前Treeview容器宽度
-                current_container_width = (
-                    fish_tree_ref.winfo_width() if fish_tree_ref else 500
-                )
-
-                # 计算各列宽度
-                column_widths = {
-                    "时间": int(current_container_width * (time_ratio / total_ratio)),
-                    "名称": int(current_container_width * (name_ratio / total_ratio)),
-                    "品质": int(
-                        current_container_width * (quality_ratio / total_ratio)
-                    ),
-                    "重量": int(current_container_width * (weight_ratio / total_ratio)),
-                }
-
-                # print(f"根据字体大小 {new_font_size}px 计算得到的列宽: {column_widths}")
-
-                # 应用新列宽到Treeview
-                for col, width in column_widths.items():
-                    fish_tree_ref.column(col, width=width, anchor="center")
-
-                # 动态调整行高，通过样式设置
-                # 计算合适的行高
-                new_rowheight = int(
-                    new_font_size * 2.2
-                )  # 行高为字体大小的2.2倍，确保垂直间距合适
-
-                # 直接通过样式修改Treeview行高
-                # 尝试修改多种Treeview样式，确保覆盖所有可能的样式名称
-                style.configure("Treeview", rowheight=new_rowheight)
-                style.configure(
-                    "Info.Treeview", rowheight=new_rowheight
-                )  # 对应bootstyle="info"
-                style.configure(
-                    "Table.Treeview", rowheight=new_rowheight
-                )  # ttkbootstrap默认Treeview样式
-                style.configure(
-                    "CustomTreeview.Treeview", rowheight=new_rowheight
-                )  # 自定义样式
-
-                # 强制更新Treeview布局，确保列宽和行高调整立即生效
-                fish_tree_ref.update_idletasks()
-
-                # 不调整外面的布局，只调整Treeview内部列宽和行高
-                # 确保父容器的大小不会受到影响
-            except Exception as e:
-                print(f"调整Treeview列宽时出错: {e}")
-                # 处理可能的错误
-                pass
-
-        # 更新运行日志文本字体
-        if "log_text" in globals():
-            try:
-                log_text_size = max(5, min(30, int(8 * scale_factor)))
-                log_text_font = (base_font, log_text_size)
-                log_text.configure(font=log_text_font)
-            except Exception as e:
-                print(f"调整运行日志字体时出错: {e}")
 
     # ==================== 右侧面板（钓鱼记录区域） ====================
     right_panel = ttkb.Frame(main_frame)
@@ -3525,7 +3375,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         left_status_frame,
-        text="v.2.9.1-bata.1 | PartyFish",
+        text="v.2.9.2 | PartyFish",
         bootstyle="light",
         font=("Segoe UI", 8, "bold"),
     )
@@ -3575,30 +3425,7 @@ def create_gui():
         dev_window.resizable(False, False)
 
         # 设置窗口图标（与主窗口相同）
-        try:
-            import sys
-            import os
-
-            # 处理PyInstaller打包后的资源路径
-            if hasattr(sys, "_MEIPASS"):
-                # 打包后使用_internal目录
-                icon_path = os.path.join(sys._MEIPASS, "_internal", "666.ico")
-                # 如果_internal目录不存在，尝试直接在MEIPASS下查找
-                if not os.path.exists(icon_path):
-                    icon_path = os.path.join(sys._MEIPASS, "666.ico")
-            else:
-                # 开发环境使用当前目录
-                icon_path = "666.ico"
-
-            # 使用iconphoto方法设置图标，同时支持窗口和任务栏图标
-            icon = tk.PhotoImage(file=icon_path)  # 使用全局导入的tk变量
-            dev_window.iconphoto(True, icon)  # True表示同时设置窗口和任务栏图标
-        except Exception as e:
-            # 如果iconphoto失败，尝试回退到iconbitmap
-            try:
-                dev_window.iconbitmap(icon_path)
-            except:
-                pass
+        set_window_icon(dev_window)
 
         # 保存窗口实例
         dev_window_instance = dev_window
@@ -3627,7 +3454,7 @@ def create_gui():
         title_label.bind("<Button-1>", lambda e: open_github())
 
         # 开发者列表
-        developers = ["FadedTUMI", "XiaoXiao", "MaiDong"]
+        developers = ["FadedTUMI", "PeiXiaoXiao", "MaiDong"]
 
         for dev in developers:
             dev_label = ttkb.Label(
@@ -3918,56 +3745,67 @@ def scale_coords_center_anchored(base_x, base_y, base_w, base_h):
 def jiashi_scale_point(x, y):
     """加时功能专用的单点缩放函数"""
     # 计算加时专用的缩放比例
-    # 基于2560×1440为基准，根据当前分辨率计算独立的缩放比例
-    jiashi_scale_x = TARGET_WIDTH / 2560
-    jiashi_scale_y = TARGET_HEIGHT / 1440
-    return (int(x * jiashi_scale_x), int(y * jiashi_scale_y))
+    # 基于2560×1440为基准，使用统一的缩放比例确保按钮位置准确
+    scale_x = TARGET_WIDTH / 2560
+    scale_y = TARGET_HEIGHT / 1440
+    # 使用统一的缩放比例，取最小值以适应不同宽高比
+    jiashi_scale = min(scale_x, scale_y)
+    return (int(x * jiashi_scale), int(y * jiashi_scale))
 
 
 def jiashi_scale_region(x, y, w, h):
     """加时功能专用的区域缩放函数"""
     # 计算加时专用的缩放比例
-    jiashi_scale_x = TARGET_WIDTH / 2560
-    jiashi_scale_y = TARGET_HEIGHT / 1440
+    # 基于2560×1440为基准，使用统一的缩放比例确保区域位置准确
+    scale_x = TARGET_WIDTH / 2560
+    scale_y = TARGET_HEIGHT / 1440
+    # 使用统一的缩放比例，取最小值以适应不同宽高比
+    jiashi_scale = min(scale_x, scale_y)
     return (
-        int(x * jiashi_scale_x),
-        int(y * jiashi_scale_y),
-        int(w * jiashi_scale_x),
-        int(h * jiashi_scale_y),
+        int(x * jiashi_scale),
+        int(y * jiashi_scale),
+        int(w * jiashi_scale),
+        int(h * jiashi_scale),
     )
 
 
 def jiashi_scale_point_center_anchored(x, y):
     """加时功能专用的中心锚定单点缩放函数"""
     # 计算加时专用的缩放比例
-    jiashi_scale_x = TARGET_WIDTH / 2560
-    jiashi_scale_y = TARGET_HEIGHT / 1440
+    # 基于2560×1440为基准，使用统一的缩放比例确保按钮位置准确
+    scale_x = TARGET_WIDTH / 2560
+    scale_y = TARGET_HEIGHT / 1440
+    # 使用统一的缩放比例，取最小值以适应不同宽高比
+    jiashi_scale = min(scale_x, scale_y)
 
     # 中心锚定计算
     center_offset_x = x - 2560 / 2
     center_offset_y = y - 1440 / 2
 
     return (
-        int(TARGET_WIDTH / 2 + center_offset_x * jiashi_scale_x),
-        int(TARGET_HEIGHT / 2 + center_offset_y * jiashi_scale_y),
+        int(TARGET_WIDTH / 2 + center_offset_x * jiashi_scale),
+        int(TARGET_HEIGHT / 2 + center_offset_y * jiashi_scale),
     )
 
 
 def jiashi_scale_coords_center_anchored(x, y, w, h):
     """加时功能专用的中心锚定区域缩放函数"""
     # 计算加时专用的缩放比例
-    jiashi_scale_x = TARGET_WIDTH / 2560
-    jiashi_scale_y = TARGET_HEIGHT / 1440
+    # 基于2560×1440为基准，使用统一的缩放比例确保区域位置准确
+    scale_x = TARGET_WIDTH / 2560
+    scale_y = TARGET_HEIGHT / 1440
+    # 使用统一的缩放比例，取最小值以适应不同宽高比
+    jiashi_scale = min(scale_x, scale_y)
 
     # 中心锚定计算
     center_offset_x = x - 2560 / 2
     center_offset_y = y - 1440 / 2
 
     return (
-        int(TARGET_WIDTH / 2 + center_offset_x * jiashi_scale_x),
-        int(TARGET_HEIGHT / 2 + center_offset_y * jiashi_scale_y),
-        int(w * jiashi_scale_x),
-        int(h * jiashi_scale_y),
+        int(TARGET_WIDTH / 2 + center_offset_x * jiashi_scale),
+        int(TARGET_HEIGHT / 2 + center_offset_y * jiashi_scale),
+        int(w * jiashi_scale),
+        int(h * jiashi_scale),
     )
 
 
@@ -3990,7 +3828,7 @@ def update_region_coords():
     """
     根据当前缩放比例更新所有区域坐标
     """
-    global region3_coords, region4_coords, region5_coords, region6_coords, jiashi_region_coords, btn_no_jiashi_coords, btn_yes_jiashi_coords,fish_bucket_full_region_coords
+    global region3_coords, region4_coords, region5_coords, region6_coords, jiashi_region_coords, btn_no_jiashi_coords, btn_yes_jiashi_coords
     # 先计算最新的缩放比例，确保适配当前分辨率
     calculate_scale_factors()
     # 上鱼星星 - 顶部中央区域
@@ -4006,8 +3844,6 @@ def update_region_coords():
     # 加时按钮坐标 - 使用加时专用的中心锚定缩放
     btn_no_jiashi_coords = jiashi_scale_point_center_anchored(*BTN_NO_JIASHI_BASE)
     btn_yes_jiashi_coords = jiashi_scale_point_center_anchored(*BTN_YES_JIASHI_BASE)
-    # 鱼桶满提示区域
-    fish_bucket_full_region_coords = scale_coords(*FISH_BUCKET_FULL_REGION_BASE)
     # 当坐标更新时，检查是否需要重新加载模板
     reload_templates_if_scale_changed()
 
@@ -4798,128 +4634,168 @@ def record_caught_fish():
             }
             add_debug_info(debug_info)
         return None
-def capture_fish_bucket_full_region(scr_param=None):
-    """截取鱼桶满提示区域的图像
-    
-    Args:
-        scr_param: 截图对象，如果为None则使用全局scr对象
-    
-    Returns:
-        img_rgb: RGB格式的鱼桶满提示区域图像，如果截取失败则返回None
-    """
-    global scr
-    # 优先使用传入的scr_param，如果为None则使用全局scr
-    current_scr = scr_param if scr_param is not None else scr
-    
-    if current_scr is None:
-        return None
 
-    # 确保区域坐标已初始化
-    if fish_bucket_full_region_coords is None:
-        update_region_coords()
-    
-    # 使用已计算的区域坐标
-    x1, y1, w, h = fish_bucket_full_region_coords
-    x2, y2 = x1 + w, y1 + h
-    region = (x1, y1, x2, y2)
-
-    try:
-        frame = current_scr.grab(region)
-        if frame is None:
-            return None
-        img = np.array(frame)
-        # 转换为RGB格式（OCR需要）
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
-        
-        return img_rgb
-    except Exception as e:
-        return None
 
 def check_fish_bucket_full(scr_param=None):
     """检查鱼桶是否已满
     
     Args:
-        scr_param: 截图对象，如果为None则使用全局scr对象
+        scr_param: 截图对象，如果为None则使用全局scr对象（已弃用）
     
     Returns:
-        bool: 如果检测到鱼桶满提示则返回True，否则返回False
+        bool: 如果检测到鱼桶满则返回True，否则返回False
     """
     global fish_bucket_full_detected
     
-    if not OCR_AVAILABLE or ocr_engine is None:
-        return False
-
-    # 截取鱼桶满提示区域
-    img = capture_fish_bucket_full_region(scr_param)
-    if img is None:
-        return False
-
-    try:
-        # 执行OCR识别
-        result, elapse = ocr_engine(img)
-        
-        # 确保result是列表类型
-        if result is None:
-            result = []
-        
-        # 合并所有识别到的文本
-        full_text = ""
-        for line in result:
-            if isinstance(line, list) and len(line) >= 2:
-                full_text += line[1] + " "
-
-        full_text = full_text.strip()
-
-        # 检查是否包含鱼桶满提示文本
-        bucket_full_detected = FISH_BUCKET_FULL_TEXT in full_text
-        
-        # 如果检测到鱼桶满，更新状态并处理
-        if bucket_full_detected and not fish_bucket_full_detected:
-            fish_bucket_full_detected = True
-            handle_fish_bucket_full()
-        
-        return bucket_full_detected
-
-    except Exception as e:
-        return False
+    # 直接返回通过抛竿间隔检测的结果
+    return fish_bucket_full_detected or bucket_full_by_interval
 
 def play_fish_bucket_warning_sound():
-    """播放鱼桶满警告音效"""
+    """播放鱼桶满/没鱼饵警告!音效"""
     if not fish_bucket_sound_enabled:
         return
     
     try:
-        import winsound
-        
-        # 尝试多种播放警告声音的方法
-        try:
-            # 方法1：使用数字常量（0x00000030 对应 MB_ICONEXCLAMATION）
-            winsound.MessageBeep(0x00000030)
-        except:
-            try:
-                # 方法2：使用预定义常量（如果存在）
-                if hasattr(winsound, 'MB_ICONWARNING'):
-                    winsound.MessageBeep(winsound.MB_ICONWARNING)
-                elif hasattr(winsound, 'MB_ICONEXCLAMATION'):
-                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-                elif hasattr(winsound, 'MB_ICONASTERISK'):
-                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
-                else:
-                    # 方法3：直接蜂鸣
-                    winsound.Beep(800, 500)
-            except:
-                # 最终备用方案
-                winsound.Beep(800, 500)
-        
-        # 增强效果：播放两次不同频率的声音
-        winsound.Beep(1000, 300)
-        time.sleep(0.1)
-        winsound.Beep(600, 400)
-        
+        # 创建警告窗口，开始循环播放声音
+        WarningSoundWindow()
     except Exception as e:
-        print(f"⚠️  [警告] 播放鱼桶满音效失败: {e}")
-        # 备选方案：使用print输出控制台铃声
-        print('\a')  # 控制台铃声
+        print(f"⚠️[警告] 播放鱼桶满了/没鱼饵警告音效失败: {e}")
+        # 备选方案：播放单次声音
+        try:
+            import winsound
+            winsound.MessageBeep(0x00000030)
+            # 备选方案：使用print输出控制台铃声
+            print('\a')  # 控制台铃声
+        except:
+            pass
+
+class WarningSoundWindow:
+    """鱼桶满/没鱼饵警告!声音窗口 - 循环播放声音直到窗口关闭"""
+    instance = None  # 类变量，用于跟踪是否已存在窗口实例
+    
+    def __new__(cls, *args, **kwargs):
+        """确保只能创建一个窗口实例"""
+        if cls.instance is None:
+            cls.instance = super(WarningSoundWindow, cls).__new__(cls)
+        return cls.instance
+    
+    def __init__(self):
+        """初始化警告窗口"""
+        if hasattr(self, 'initialized') and self.initialized:
+            # 如果已经初始化，显示并置顶窗口
+            if self.window:
+                self.window.deiconify()
+                self.window.lift()
+            return
+        
+        # 创建窗口
+        self.window = tk.Toplevel()  # 使用标准Toplevel，避免bootstyle错误
+        self.window.title("⚠️鱼桶满了/没鱼饵警告！")
+        self.window.geometry("350x200")  # 增加窗口大小
+        self.window.resizable(False, False)
+        self.window.attributes("-topmost", True)  # 置顶窗口
+        
+        # 设置窗口图标为666.ico
+        set_window_icon(self.window)
+        
+        # 声音播放控制
+        self.sound_playing = True
+        self.sound_thread = None
+        
+        # 创建UI元素
+        self.create_widgets()
+        
+        # 绑定窗口关闭事件
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        # 启动声音播放线程
+        self.start_sound_playback()
+        
+        self.initialized = True
+    
+    def create_widgets(self):
+        """创建窗口控件"""
+        main_frame = ttkb.Frame(self.window, padding=20)
+        main_frame.pack(fill=BOTH, expand=YES)
+        
+        # 警告标题
+        title_label = ttkb.Label(
+            main_frame,
+            text="⚠️鱼桶满/没鱼饵警告!",
+            font=("Segoe UI", 16, "bold"),
+            bootstyle="danger"
+        )
+        title_label.pack(pady=(10, 20))
+        
+        # 警告信息
+        info_label = ttkb.Label(
+            main_frame,
+            text="检测到鱼桶已满/没鱼饵！请及时处理。",
+            font=("Segoe UI", 12),
+            bootstyle="info"
+        )
+        info_label.pack(pady=(0, 30))
+        
+        # 关闭按钮
+        close_btn = ttkb.Button(
+            main_frame,
+            text="关闭警告",
+            command=self.on_close,
+            bootstyle="danger",  # 使用实色按钮，更醒目
+            width=20,  # 增加按钮宽度
+            padding=10  # 增加按钮内边距
+        )
+        close_btn.pack(pady=(0, 10))
+        
+        # 提示信息
+        hint_label = ttkb.Label(
+            main_frame,
+            text="点击按钮或关闭窗口即可停止警告音效",
+            font=("Segoe UI", 8),
+            bootstyle="secondary"
+        )
+        hint_label.pack()
+        
+        # 调整布局，确保所有控件都能完整显示
+        main_frame.update_idletasks()
+        # 确保窗口大小足够容纳所有控件
+        self.window.geometry(f"{main_frame.winfo_reqwidth() + 40}x{main_frame.winfo_reqheight() + 40}")
+    
+    def start_sound_playback(self):
+        """启动声音播放线程"""
+        def play_loop_sound():
+            """循环播放声音"""
+            import winsound
+            
+            while self.sound_playing:
+                try:
+                    # 播放警告声音
+                    winsound.Beep(1000, 300)
+                    time.sleep(0.1)
+                    winsound.Beep(800, 500)
+                    time.sleep(1)  # 间隔1秒后再次播放
+                except Exception as e:
+                    print(f"⚠️  [警告] 播放循环警告音效失败: {e}")
+                    time.sleep(1)
+        
+        self.sound_thread = threading.Thread(target=play_loop_sound, daemon=True)
+        self.sound_thread.start()
+    
+    def on_close(self):
+        """窗口关闭事件处理"""
+        # 停止声音播放
+        self.sound_playing = False
+        
+        # 等待声音线程结束
+        if self.sound_thread:
+            self.sound_thread.join(timeout=1)
+        
+        # 销毁窗口
+        self.window.destroy()
+        
+        # 重置实例引用
+        WarningSoundWindow.instance = None
+
 
 def handle_fish_bucket_full():
     """处理鱼桶满的情况"""
@@ -4928,20 +4804,133 @@ def handle_fish_bucket_full():
     # 在运行日志中提示
     print(f"🪣  [警告] 检测到: {FISH_BUCKET_FULL_TEXT}")
     
-    # 播放警告音效
-    play_fish_bucket_warning_sound()
-    
-    # 停止脚本
-    if run_event.is_set():
-        toggle_run()
-        print("🛑 [状态] 脚本已自动停止 (鱼桶已满)")
+    # 根据不同模式执行不同操作
+    if bucket_detection_mode == "mode1":
+        # 模式1：自动暂停
+        # 播放警告音效
+        play_fish_bucket_warning_sound()
+        
+        # 停止脚本
+        if run_event.is_set():
+            toggle_run()
+            print("🛑 [状态] 脚本已自动停止 (鱼桶已满/没鱼饵/没鱼饵)")
+    elif bucket_detection_mode == "mode2":
+        # 模式2：F键+左键模式 - 按下一次F键然后一直鼠标左键，遇到键盘活动自动停止
+        play_fish_bucket_warning_sound()
+        
+        try:
+            # 按下一次F键
+            keyboard_controller.press(keyboard.KeyCode.from_char('f'))
+            time.sleep(0.1)
+            keyboard_controller.release(keyboard.KeyCode.from_char('f'))
+            print("⌨️  [操作] 已按下F键")
+            
+            # 一直按住鼠标左键，直到检测到键盘活动
+            def on_key_press(key):
+                """键盘按下事件处理"""
+                print("⌨️  [检测] 键盘活动，停止鼠标左键")
+                return False  # 停止监听器
+            
+            # 启动键盘监听器
+            keyboard_listener = keyboard.Listener(on_press=on_key_press)
+            keyboard_listener.start()
+            
+            # 按住鼠标左键
+            mouse_controller.press(mouse.Button.left)
+            print("🖱️  [操作] 开始按住鼠标左键")
+            
+            # 等待键盘活动或5秒后自动停止
+            start_time = time.time()
+            while keyboard_listener.is_alive() and time.time() - start_time < 5:
+                time.sleep(0.1)
+            
+            # 释放鼠标左键
+            mouse_controller.release(mouse.Button.left)
+            print("🖱️  [操作] 已释放鼠标左键")
+            
+            # 停止键盘监听器
+            if keyboard_listener.is_alive():
+                keyboard_listener.stop()
+        except Exception as e:
+            print(f"❌ [错误] 执行F键+左键模式时出错: {e}")
+    elif bucket_detection_mode == "mode3":
+        # 模式3：仅F键模式 - 不会自动暂停，只会按下一次F键
+        play_fish_bucket_warning_sound()
+        
+        try:
+            # 按下一次F键
+            keyboard_controller.press(keyboard.KeyCode.from_char('f'))
+            time.sleep(0.1)
+            keyboard_controller.release(keyboard.KeyCode.from_char('f'))
+            print("⌨️  [操作] 已按下F键")
+        except Exception as e:
+            print(f"❌ [错误] 执行仅F键模式时出错: {e}")
     
     fish_bucket_full_detected = True
 
 def reset_fish_bucket_full_detection():
     """重置鱼桶满检测状态"""
-    global fish_bucket_full_detected
+    global fish_bucket_full_detected, bucket_full_by_interval
     fish_bucket_full_detected = False
+    bucket_full_by_interval = False
+    with casting_interval_lock:
+        casting_timestamps.clear()
+
+
+def bucket_full_detection_thread():
+    """鱼桶满独立检测线程
+    
+    定期检查抛竿时间戳，计算连续抛竿间隔，当连续4次抛竿间隔在±0.15秒范围内时，判断鱼桶已满/没鱼饵/没鱼饵
+    """
+    global fish_bucket_full_detected, bucket_full_by_interval
+    
+    while True:
+        if not run_event.is_set():
+            time.sleep(0.5)
+            continue
+        
+        try:
+            # 检查是否已经检测到鱼桶满
+            if fish_bucket_full_detected:
+                time.sleep(0.5)
+                continue
+            
+            with casting_interval_lock:
+                # 复制时间戳列表，避免在计算过程中被修改
+                timestamps = casting_timestamps.copy()
+            
+            # 需要至少REQUIRED_CONSECUTIVE_MATCHES+1个时间戳才能计算REQUIRED_CONSECUTIVE_MATCHES个间隔
+            if len(timestamps) < REQUIRED_CONSECUTIVE_MATCHES + 1:
+                time.sleep(0.5)
+                continue
+            
+            # 计算连续抛竿间隔
+            intervals = []
+            for i in range(1, len(timestamps)):
+                interval = timestamps[i] - timestamps[i-1]
+                intervals.append(interval)
+            
+            # 检查是否有连续REQUIRED_CONSECUTIVE_MATCHES个间隔在阈值范围内
+            consecutive_matches = 0
+            for i in range(1, len(intervals)):
+                # 计算相邻间隔的差值
+                interval_diff = abs(intervals[i] - intervals[i-1])
+                if interval_diff <= CASTING_INTERVAL_THRESHOLD:
+                    consecutive_matches += 1
+                    if consecutive_matches >= REQUIRED_CONSECUTIVE_MATCHES - 1:  # 需要连续4个间隔，所以需要3个差值匹配
+                        # 检测到鱼桶满
+                        bucket_full_by_interval = True
+                        fish_bucket_full_detected = True
+                        handle_fish_bucket_full()
+                        break
+                else:
+                    consecutive_matches = 0
+            
+            time.sleep(0.5)  # 每0.5秒检查一次
+            
+        except Exception as e:
+            print(f"⚠️  [警告] 鱼桶满检测线程出错: {e}")
+            time.sleep(1)  # 出错时延长检查间隔
 
 def get_session_fish_list():
     """获取当前会话的钓鱼记录"""
@@ -6088,6 +6077,10 @@ def main():
     # 启动加时处理线程
     jiashi_thread = threading.Thread(target=handle_jiashi_thread, daemon=True)
     jiashi_thread.start()
+    
+    # 启动鱼桶满独立检测线程
+    bucket_full_thread = threading.Thread(target=bucket_full_detection_thread, daemon=True)
+    bucket_full_thread.start()
 
     while True:
         if run_event.is_set():
@@ -6101,18 +6094,19 @@ def main():
 
                 # 检测鱼桶是否已满
                 if check_fish_bucket_full(scr):
-                    # 鱼桶已满，脚本会自动停止并播放音效
+                    # 鱼桶已满/没鱼饵/没鱼饵，脚本会自动停止并播放音效
                     continue
 
                 # 检测F1/F2抛竿
-                if f1_mached(scr):
-                    user32.mouse_event(0x02, 0, 0, 0, 0)
-                    jittered_pao = add_jitter(paogantime)
-                    time.sleep(jittered_pao)
-                    print_timing_info("抛竿", paogantime, jittered_pao)
-                    user32.mouse_event(0x04, 0, 0, 0, 0)
-                    time.sleep(0.15)
-                elif f2_mached(scr):
+                if f1_mached(scr) or f2_mached(scr):
+                    # 记录抛竿时间
+                    current_time = time.time()
+                    with casting_interval_lock:
+                        casting_timestamps.append(current_time)
+                        # 保持列表长度不超过所需次数+1（用于计算间隔）
+                        if len(casting_timestamps) > REQUIRED_CONSECUTIVE_MATCHES + 1:
+                            casting_timestamps.pop(0)
+                    
                     user32.mouse_event(0x02, 0, 0, 0, 0)
                     jittered_pao = add_jitter(paogantime)
                     time.sleep(jittered_pao)
@@ -6187,7 +6181,7 @@ if __name__ == "__main__":
     print()
     print("╔" + "═" * 50 + "╗")
     print("║" + " " * 50 + "║")
-    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9.1-bata.2".ljust(44) + "║")
+    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9.2".ljust(44) + "║")
     print("║" + " " * 50 + "║")
     print("╠" + "═" * 50 + "╣")
     print(
