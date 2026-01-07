@@ -186,7 +186,8 @@ class LogRedirector:
         self.buffer.write(text)
 
     def flush(self):
-        self.original_stream.flush()
+        if self.original_stream is not None:
+            self.original_stream.flush()
         self.buffer.flush()
 
 
@@ -5026,17 +5027,22 @@ class WarningSoundWindow:
         """启动声音播放线程"""
         def play_loop_sound():
             """循环播放声音"""
-            import winsound
-            
             while self.sound_playing:
                 try:
-                    # 播放警告声音
+                    # 尝试使用winsound播放警告声音
+                    import winsound
                     winsound.Beep(1000, 300)
                     time.sleep(0.1)
                     winsound.Beep(800, 500)
                     time.sleep(1)  # 间隔1秒后再次播放
                 except Exception as e:
                     print(f"⚠️  [警告] 播放循环警告音效失败: {e}")
+                    # 备选方案：使用控制台铃声
+                    try:
+                        print('\a', end='', flush=True)  # 控制台铃声
+                        time.sleep(1.5)  # 间隔1.5秒后再次播放
+                    except:
+                        pass
                     time.sleep(1)
         
         self.sound_thread = threading.Thread(target=play_loop_sound, daemon=True)
@@ -6169,8 +6175,13 @@ def toggle_run():
         try:
             import winsound
             winsound.Beep(1000, 200)  # 频率1000Hz，持续200ms，模拟叮的声音
-        except:
-            pass
+        except Exception as e:
+            print(f"⚠️  [警告] 播放暂停提示音失败: {e}")
+            # 备选方案：使用控制台铃声
+            try:
+                print('\a', end='', flush=True)  # 控制台铃声
+            except:
+                pass
     else:
         # 重置鱼桶满检测状态
         reset_fish_bucket_full_detection()
@@ -6189,8 +6200,13 @@ def toggle_run():
                     try:
                         import winsound
                         winsound.Beep(1500, 200)  # 频率1500Hz，持续200ms，模拟叮的声音
-                    except:
-                        pass
+                    except Exception as e:
+                        print(f"⚠️  [警告] 播放开始提示音失败: {e}")
+                        # 备选方案：使用控制台铃声
+                        try:
+                            print('\a', end='', flush=True)  # 控制台铃声
+                        except:
+                            pass
                 else:
                     time.sleep(0.1)
                     print("⚠️  [警告] 未识别到鱼饵，请确保游戏界面正确")
@@ -6210,8 +6226,13 @@ def toggle_run():
             try:
                 import winsound
                 winsound.Beep(1500, 200)  # 频率1500Hz，持续200ms，模拟叮的声音
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️  [警告] 播放继续提示音失败: {e}")
+                # 备选方案：使用控制台铃声
+                try:
+                    print('\a', end='', flush=True)  # 控制台铃声
+                except:
+                    pass
 
 
 def on_press(key):
