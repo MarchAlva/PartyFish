@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 import threading  # 用于在独立线程中运行脚本
 import ctypes
+import winsound  # 用于播放音效
 from pynput import keyboard, mouse  # 用于监听键盘和鼠标事件，支持热键和鼠标侧键操作
 
 # 初始化键盘和鼠标控制器
@@ -4936,14 +4937,12 @@ def play_fish_bucket_warning_sound():
         return
 
     try:
-        # 创建警告窗口，开始循环播放声音
-        WarningSoundWindow()
+        # 双击关闭警告窗口
+        DoubleClickCloseWarningWindow()
     except Exception as e:
         print(f"⚠️[警告] 播放鱼桶满了/没鱼饵警告音效失败: {e}")
         # 备选方案：播放单次声音
         try:
-            import winsound
-
             winsound.MessageBeep(0x00000030)
             # 备选方案：使用print输出控制台铃声
             print("\a")  # 控制台铃声
@@ -4951,142 +4950,161 @@ def play_fish_bucket_warning_sound():
             pass
 
 
-class WarningSoundWindow:
-    """鱼桶满/没鱼饵警告!声音窗口 - 循环播放声音直到窗口关闭"""
+class DoubleClickCloseWarningWindow:
+    """鼠标双击关闭的警告窗口"""
 
-    instance = None  # 类变量，用于跟踪是否已存在窗口实例
+    _active_window = None
 
     def __new__(cls, *args, **kwargs):
-        """确保只能创建一个窗口实例"""
-        if cls.instance is None:
-            cls.instance = super(WarningSoundWindow, cls).__new__(cls)
-        return cls.instance
+        if cls._active_window is not None:
+            try:
+                cls._active_window.on_close()
+            except:
+                pass
+
+        instance = super(DoubleClickCloseWarningWindow, cls).__new__(cls)
+        cls._active_window = instance
+        return instance
 
     def __init__(self):
-        """初始化警告窗口"""
         if hasattr(self, "initialized") and self.initialized:
-            # 如果已经初始化，显示并置顶窗口
-            if self.window:
-                self.window.deiconify()
-                self.window.lift()
             return
 
-        # 创建窗口
-        self.window = tk.Toplevel()  # 使用标准Toplevel，避免bootstyle错误
-        self.window.title("⚠️鱼桶满了/没鱼饵警告！")
-        self.window.geometry("350x200")  # 增加窗口大小
-        self.window.resizable(False, False)
-        self.window.attributes("-topmost", True)  # 置顶窗口
+        self.last_click_time = 0
+        self.click_count = 0
+        self.double_click_threshold = 0.3
 
-        # 设置窗口图标为666.ico
-        set_window_icon(self.window)
-
-        # 声音播放控制
+        self.mouse_listener = None
         self.sound_playing = True
         self.sound_thread = None
 
-        # 创建UI元素
-        self.create_widgets()
-
-        # 绑定窗口关闭事件
-        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
-
-        # 启动声音播放线程
+        self.create_window()
+        self.start_mouse_listener()
         self.start_sound_playback()
 
         self.initialized = True
 
-    def create_widgets(self):
-        """创建窗口控件"""
+    def start_mouse_listener(self):
+        """启动鼠标双击监听器"""
+
+        def on_click(x, y, button, pressed):
+            if pressed and button == mouse.Button.left:
+                current_time = time.time()
+                if current_time - self.last_click_time < self.double_click_threshold:
+                    # 双击检测成功
+                    self.click_count += 1
+                    if self.click_count >= 2:
+                        print(f"🖱️ [双击] 检测到鼠标双击，关闭警告窗口")
+                        self.on_close()
+                        return False  # 停止监听器
+                else:
+                    # 重置计数
+                    self.click_count = 1
+                    self.last_click_time = current_time
+            return True
+
+        self.mouse_listener = mouse.Listener(on_click=on_click)
+        self.mouse_listener.daemon = True
+        self.mouse_listener.start()
+
+    def create_window(self):
+        """创建窗口"""
+        self.window = tk.Toplevel()
+        self.window.title("⚠️鱼桶满了/没鱼饵警告！")
+        self.window.geometry("400x250")
+        self.window.resizable(False, False)
+        self.window.attributes("-topmost", True)
+
+        # 创建UI
         main_frame = ttkb.Frame(self.window, padding=20)
         main_frame.pack(fill=BOTH, expand=YES)
 
-        # 警告标题
+        # 标题
         title_label = ttkb.Label(
             main_frame,
             text="⚠️鱼桶满/没鱼饵警告!",
             font=("Segoe UI", 16, "bold"),
             bootstyle="danger",
         )
-        title_label.pack(pady=(10, 20))
+        title_label.pack(pady=(10, 15))
 
-        # 警告信息
+        # 信息
         info_label = ttkb.Label(
             main_frame,
             text="检测到鱼桶已满/没鱼饵！请及时处理。",
             font=("Segoe UI", 12),
             bootstyle="info",
         )
-        info_label.pack(pady=(0, 30))
+        info_label.pack(pady=(0, 20))
+
+        # 操作提示
+        hint_label = ttkb.Label(
+            main_frame,
+            text="🖱️ 操作提示：\n• 双击鼠标左键关闭警告\n• 或点击下方按钮关闭",
+            font=("Segoe UI", 10),
+            bootstyle="warning",
+            justify="left",
+        )
+        hint_label.pack(pady=(0, 20))
 
         # 关闭按钮
         close_btn = ttkb.Button(
             main_frame,
             text="关闭警告",
             command=self.on_close,
-            bootstyle="danger",  # 使用实色按钮，更醒目
-            width=20,  # 增加按钮宽度
-            padding=10,  # 增加按钮内边距
+            bootstyle="danger",
+            width=20,
         )
-        close_btn.pack(pady=(0, 10))
-
-        # 提示信息
-        hint_label = ttkb.Label(
-            main_frame,
-            text="点击按钮或关闭窗口即可停止警告音效",
-            font=("Segoe UI", 8),
-            bootstyle="secondary",
-        )
-        hint_label.pack()
+        close_btn.pack()
 
         # 调整布局，确保所有控件都能完整显示
         main_frame.update_idletasks()
+
         # 确保窗口大小足够容纳所有控件
         self.window.geometry(
             f"{main_frame.winfo_reqwidth() + 40}x{main_frame.winfo_reqheight() + 40}"
         )
 
-    def start_sound_playback(self):
-        """启动声音播放线程"""
+        # 窗口关闭事件
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        def play_loop_sound():
-            """循环播放声音"""
+    def start_sound_playback(self):
+        """启动声音播放"""
+
+        def play_sound():
             while self.sound_playing:
                 try:
-                    # 尝试使用winsound播放警告声音
-                    import winsound
-
                     winsound.Beep(1000, 300)
                     time.sleep(0.1)
                     winsound.Beep(800, 500)
-                    time.sleep(1)  # 间隔1秒后再次播放
-                except Exception as e:
-                    print(f"⚠️  [警告] 播放循环警告音效失败: {e}")
-                    # 备选方案：使用控制台铃声
-                    try:
-                        print("\a", end="", flush=True)  # 控制台铃声
-                        time.sleep(1.5)  # 间隔1.5秒后再次播放
-                    except:
-                        pass
                     time.sleep(1)
+                except:
+                    print("\a", end="", flush=True)
+                    time.sleep(1.5)
 
-        self.sound_thread = threading.Thread(target=play_loop_sound, daemon=True)
+        self.sound_thread = threading.Thread(target=play_sound, daemon=True)
         self.sound_thread.start()
 
     def on_close(self):
-        """窗口关闭事件处理"""
-        # 停止声音播放
+        """关闭窗口"""
         self.sound_playing = False
 
-        # 等待声音线程结束
         if self.sound_thread:
             self.sound_thread.join(timeout=1)
 
-        # 销毁窗口
-        self.window.destroy()
+        self.stop_mouse_listener()
 
-        # 重置实例引用
-        WarningSoundWindow.instance = None
+        if self.window:
+            self.window.destroy()
+
+        # 重置实例
+        DoubleClickCloseWarningWindow._active_window = None
+
+    def stop_mouse_listener(self):
+        """停止鼠标监听器"""
+        if self.mouse_listener:
+            self.mouse_listener.stop()
+            self.mouse_listener = None
 
 
 def handle_fish_bucket_full():
