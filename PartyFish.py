@@ -113,7 +113,7 @@ bucket_detection_mode = "mode1"  # 默认模式
 # 抛竿间隔检测相关设置
 casting_timestamps = []  # 存储最近的抛竿时间戳
 casting_interval_lock = threading.Lock()  # 保护抛竿时间戳的线程锁
-CASTING_INTERVAL_THRESHOLD = 0.15  # 抛竿间隔阈值（秒）
+CASTING_INTERVAL_THRESHOLD = 1.0  # 抛竿间隔阈值（秒）
 REQUIRED_CONSECUTIVE_MATCHES = 4  # 需要连续匹配的次数
 bucket_full_by_interval = False  # 标记是否通过间隔检测到鱼桶满/没鱼饵！
 
@@ -5192,65 +5192,101 @@ def reset_fish_bucket_full_detection():
     fish_bucket_full_detected = False
     bucket_full_by_interval = False
     with casting_interval_lock:
-        casting_timestamps.clear()
+        casting_timestamps.clear()  # 清空时间戳
 
 
 def bucket_full_detection_thread():
-    """鱼桶满独立检测线程
-
-    定期检查抛竿时间戳，计算连续抛竿间隔，当连续4次抛竿间隔在±0.15秒范围内时，判断鱼桶已满/没鱼饵/没鱼饵
+    """鱼桶满独立检测线程 - 修复版
+    检测完整钓鱼循环的时长，而不是抛竿间隔
     """
     global fish_bucket_full_detected, bucket_full_by_interval
 
+    short_cycle_count = 0  # 短循环计数器
+    last_reset_time = time.time()  # 上次重置计数器的时间
+
     while True:
         if not run_event.is_set():
+            # 脚本未运行时，重置检测状态
+            short_cycle_count = 0
+            with casting_interval_lock:
+                casting_timestamps.clear()
             time.sleep(0.5)
             continue
 
         try:
-            # 检查是否已经检测到鱼桶满
-            if fish_bucket_full_detected:
-                time.sleep(0.5)
-                continue
+            # 定期重置计数器（防止累积误判）
+            current_time = time.time()
+            if current_time - last_reset_time > 30:  # 每30秒重置一次
+                if short_cycle_count > 0:
+                    print(f"🔄 [检测] 定期重置短循环计数器: {short_cycle_count}次")
+                    short_cycle_count = 0
+                last_reset_time = current_time
 
             with casting_interval_lock:
                 # 复制时间戳列表，避免在计算过程中被修改
                 timestamps = casting_timestamps.copy()
 
-            # 需要至少REQUIRED_CONSECUTIVE_MATCHES+1个时间戳才能计算REQUIRED_CONSECUTIVE_MATCHES个间隔
-            if len(timestamps) < REQUIRED_CONSECUTIVE_MATCHES + 1:
+            # 需要至少2个时间戳来计算1个间隔
+            if len(timestamps) < 2:
                 time.sleep(0.5)
                 continue
 
-            # 计算连续抛竿间隔
-            intervals = []
-            for i in range(1, len(timestamps)):
-                interval = timestamps[i] - timestamps[i - 1]
-                intervals.append(interval)
+            # 计算最近一次完整钓鱼循环的时长
+            last_interval = timestamps[-1] - timestamps[-2]
 
-            # 检查是否有连续REQUIRED_CONSECUTIVE_MATCHES个间隔在阈值范围内
-            consecutive_matches = 0
-            for i in range(1, len(intervals)):
-                # 计算相邻间隔的差值
-                interval_diff = abs(intervals[i] - intervals[i - 1])
-                if interval_diff <= CASTING_INTERVAL_THRESHOLD:
-                    consecutive_matches += 1
-                    if (
-                        consecutive_matches >= REQUIRED_CONSECUTIVE_MATCHES - 1
-                    ):  # 需要连续4个间隔，所以需要3个差值匹配
-                        # 检测到鱼桶满
-                        bucket_full_by_interval = True
-                        fish_bucket_full_detected = True
-                        handle_fish_bucket_full()
-                        break
-                else:
-                    consecutive_matches = 0
+            # 调试信息：偶尔输出循环时长
+            if random.random() < 0.1:  # 10%概率输出，避免日志过多
+                print(f"📊 [检测] 钓鱼循环时长: {last_interval:.2f}秒")
+
+            # 【核心判断逻辑】
+            # 正常钓鱼循环应该至少包含：
+            # - 抛竿动画（0.5秒）
+            # - 等待上钩（随机，通常3-10秒）
+            # - 收放线（3-10秒）
+            # - 识别鱼信息（0.5秒）
+            # 总计：正常至少7-20秒
+
+            # 鱼桶满/没鱼饵时的特征：循环异常短（<3秒）
+            BUCKET_FULL_THRESHOLD = 3.0  # 3秒阈值
+
+            if last_interval < BUCKET_FULL_THRESHOLD:
+                short_cycle_count += 1
+                print(
+                    f"⚠️  [检测] 检测到短循环 #{short_cycle_count}: {last_interval:.2f}秒 (<{BUCKET_FULL_THRESHOLD}秒)"
+                )
+
+                # 连续3次短循环才判定为鱼桶满
+                REQUIRED_SHORT_CYCLES = 3
+                if (
+                    short_cycle_count >= REQUIRED_SHORT_CYCLES
+                    and not fish_bucket_full_detected
+                    and not bucket_full_by_interval
+                ):
+
+                    print(
+                        f"🪣  [警告] 连续{short_cycle_count}次短循环，判定为鱼桶满/没鱼饵！"
+                    )
+                    print(
+                        f"   最近{len(timestamps)}次循环时长: {[timestamps[i]-timestamps[i-1] for i in range(1, len(timestamps))]}"
+                    )
+
+                    bucket_full_by_interval = True
+                    fish_bucket_full_detected = True
+                    handle_fish_bucket_full()
+            else:
+                # 正常循环，重置计数器
+                if short_cycle_count > 0:
+                    if last_interval > 5.0:  # 只有明显正常的循环才重置
+                        print(
+                            f"✅ [检测] 恢复正常循环: {last_interval:.2f}秒，重置短循环计数器"
+                        )
+                        short_cycle_count = 0
 
             time.sleep(0.5)  # 每0.5秒检查一次
 
         except Exception as e:
             print(f"⚠️  [警告] 鱼桶满检测线程出错: {e}")
-            time.sleep(1)  # 出错时延长检查间隔
+            time.sleep(1)
 
 
 def get_session_fish_list():
@@ -6500,13 +6536,8 @@ def main():
 
                 # 检测F1/F2抛竿
                 if f1_mached(scr) or f2_mached(scr):
-                    # 记录抛竿时间
-                    current_time = time.time()
-                    with casting_interval_lock:
-                        casting_timestamps.append(current_time)
-                        # 保持列表长度不超过所需次数+1（用于计算间隔）
-                        if len(casting_timestamps) > REQUIRED_CONSECUTIVE_MATCHES + 1:
-                            casting_timestamps.pop(0)
+                    # 【重要】不再在这里记录抛竿时间
+                    # 改为在完成钓鱼循环后记录完整时间
 
                     user32.mouse_event(0x02, 0, 0, 0, 0)
                     jittered_pao = add_jitter(paogantime)
@@ -6553,7 +6584,19 @@ def main():
                     # 钓到鱼后，识别并记录鱼的信息
                     if OCR_AVAILABLE and record_fish_enabled:
                         try:
-                            record_caught_fish()
+                            fish_record = record_caught_fish()
+
+                            # 记录完整钓鱼循环的结束时间
+                            # 只有在成功记录鱼信息后才记录时间戳
+                            if fish_record:
+                                current_time = time.time()
+                                with casting_interval_lock:
+                                    casting_timestamps.append(current_time)
+                                    # 保持队列长度，防止内存泄露
+                                    if len(casting_timestamps) > 20:
+                                        casting_timestamps.pop(0)
+
+                                print(f"⏱️  [计时] 钓鱼循环完成，耗时记录")
                         except Exception as e:
                             print(f"⚠️  [警告] 记录鱼信息失败: {e}")
                 elif comparison_result == 1:
