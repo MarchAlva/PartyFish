@@ -3751,7 +3751,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         left_status_frame,
-        text="v.2.9.3 | PartyFish",
+        text="v.2.9.4 | PartyFish",
         bootstyle="light",
         font=("Segoe UI", 8, "bold"),
     )
