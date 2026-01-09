@@ -1,27 +1,53 @@
-Write-Host "正在打包 PartyFish..." -ForegroundColor Green
+Write-Host "Building PartyFish..." -ForegroundColor Green
 
-# 定义Python绝对路径
+# Define Python absolute path
 $pythonPath = "C:\Users\Admin\AppData\Local\Programs\Python\Python313\python.exe"
 
-# 检查Python是否安装
+# Check if Python exists
 if (-not (Test-Path $pythonPath)) {
-    Write-Host "❌ 错误: 未找到Python。请先安装Python并检查路径是否正确。" -ForegroundColor Red
+    Write-Host "Error: Python not found. Please check the path." -ForegroundColor Red
     exit 1
 }
 
-# 安装requirements.txt中的依赖
-Write-Host "正在安装依赖..." -ForegroundColor Yellow
+# Install requirements.txt dependencies
+Write-Host "Installing dependencies..." -ForegroundColor Yellow
 try {
     & $pythonPath -m pip install -r requirements.txt
-    Write-Host "✅ 依赖安装完成" -ForegroundColor Green
+    Write-Host "Dependencies installed successfully" -ForegroundColor Green
 } catch {
-    Write-Host "❌ 错误: 依赖安装失败，请检查网络连接或requirements.txt文件。" -ForegroundColor Red
-    Write-Host "错误详情: $_" -ForegroundColor Red
+    Write-Host "Error: Failed to install dependencies. Check network or requirements.txt." -ForegroundColor Red
+    Write-Host "Details: $_" -ForegroundColor Red
     exit 1
 }
 
-# 执行打包命令
-Write-Host "正在执行打包命令..." -ForegroundColor Yellow
+# Copy config file to resources
+Write-Host "Copying config file..." -ForegroundColor Yellow
+try {
+    $sourceConfig = "C:\Users\Admin\AppData\Local\Programs\Python\Python313\Lib\site-packages\rapidocr_onnxruntime\config.yaml"
+    $targetConfig = "resources\config.yaml"
+    Copy-Item -Path $sourceConfig -Destination $targetConfig -Force -ErrorAction Stop
+    Write-Host "Config file copied successfully" -ForegroundColor Green
+} catch {
+    Write-Host "Warning: Failed to copy config file: $_" -ForegroundColor Yellow
+}
+
+# Copy model files if they exist
+Write-Host "Checking and copying model files..." -ForegroundColor Yellow
+try {
+    $sourceModels = "C:\Users\Admin\AppData\Local\Programs\Python\Python313\Lib\site-packages\rapidocr_onnxruntime\models"
+    $targetModels = "resources\models"
+    if (Test-Path $sourceModels) {
+        Copy-Item -Path $sourceModels -Destination $targetModels -Recurse -Force -ErrorAction Stop
+        Write-Host "Model files copied successfully" -ForegroundColor Green
+    } else {
+        Write-Host "Info: Model files directory not found, skipping copy" -ForegroundColor Cyan
+    }
+} catch {
+    Write-Host "Warning: Failed to copy model files: $_" -ForegroundColor Yellow
+}
+
+# Run PyInstaller to build the application
+Write-Host "Running PyInstaller..." -ForegroundColor Yellow
 try {
     & $pythonPath -m PyInstaller `
         --noconfirm `
@@ -45,10 +71,10 @@ try {
         --hidden-import=winsound `
         PartyFish.py
 
-    Write-Host "✅ 打包完成！" -ForegroundColor Green
-    Write-Host "可执行文件位于 dist/PartyFish/ 目录下" -ForegroundColor Cyan
+    Write-Host "Build completed successfully!" -ForegroundColor Green
+    Write-Host "Executable is located in dist/PartyFish/ directory" -ForegroundColor Cyan
 } catch {
-    Write-Host "❌ 错误: 打包失败。" -ForegroundColor Red
-    Write-Host "错误详情: $_" -ForegroundColor Red
+    Write-Host "Error: Build failed." -ForegroundColor Red
+    Write-Host "Details: $_" -ForegroundColor Red
     exit 1
 }
