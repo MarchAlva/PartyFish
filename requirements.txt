@@ -1,0 +1,9 @@
+opencv-python
+numpy
+pillow
+pynput
+ttkbootstrap
+mss
+rapidocr_onnxruntime
+six
+onnx
