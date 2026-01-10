@@ -3847,7 +3847,7 @@ def create_gui():
         title_label.bind("<Button-1>", lambda e: open_github())
 
         # 开发者列表
-        developers = ["FadedTUMI", "PeiXiaoXiao", "MaiDong"]
+        developers = ["FadedTUMI", "PeiXiaoXiao", "MaiDong", "Lizhe"]
 
         for dev in developers:
             dev_label = ttkb.Label(
@@ -5719,9 +5719,9 @@ def bucket_full_detection_thread():
 
             # 鱼桶满/没鱼饵时的特征：循环异常短
             # 动态阈值计算：基于当前抛竿时间，确保正常循环不会被误判
-            # - 基于当前抛竿时间的1.5倍
-            # - 对于短抛竿时间，设置最小阈值2秒
-            dynamic_threshold = max(1.0, paogantime * 1)
+            # - 基于当前抛竿时间的+0.8秒
+            # - 对于短抛竿时间，设置最小阈值0.5秒
+            dynamic_threshold = max(0.5, paogantime + 0.8)
 
             if last_interval < dynamic_threshold:
                 short_cycle_count += 1
