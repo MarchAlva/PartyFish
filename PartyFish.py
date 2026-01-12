@@ -5883,8 +5883,9 @@ def bucket_full_detection_thread():
             # 鱼桶满/没鱼饵时的特征：循环异常短
             # 动态阈值计算：基于当前抛竿时间，确保正常循环不会被误判
             # - 基于当前抛竿时间的1.0倍
-            # - 对于短抛竿时间，设置最小阈值1秒
-            dynamic_threshold = max(1.5, paogantime * 1.0)
+            # 基数+当前抛竿时间的动态阈值
+            base_value = 0.8  # 基数
+            dynamic_threshold = base_value + paogantime
             if last_interval < dynamic_threshold:
                 short_cycle_count += 1
                 print(
