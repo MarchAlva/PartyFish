@@ -54,9 +54,9 @@ try {
         --name "PartyFish" `
         --onefile `
         --windowed `
-        --icon "666.ico" `
+        --icon "logo.ico" `
         --add-data "resources;resources" `
-        --add-data "666.ico;." `
+        --add-data "logo.ico;." `
         --uac-admin `
         --collect-data rapidocr_onnxruntime `
         --collect-all rapidocr_onnxruntime `

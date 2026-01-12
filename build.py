@@ -25,9 +25,9 @@ def main():
         "--windowed",
         "--onefile",
         "--icon",
-        "666.ico",
+        "logo.ico",
         "--add-data",
-        "666.ico;.",  # 这里的分号在Python中是安全的
+        "logo.ico;.",  # 这里的分号在Python中是安全的
         "--add-data",
         "resources;resources",
         "--collect-data",
