@@ -11,7 +11,6 @@ def main():
     for item in ["build", "dist"]:
         if os.path.exists(item):
             import shutil
-
             shutil.rmtree(item)
 
     # 构建命令
@@ -56,6 +55,30 @@ def main():
         "yaml",
         "--hidden-import",
         "winsound",
+        "--hidden-import",
+        "time",
+        "--hidden-import",
+        "os",
+        "--hidden-import",
+        "webbrowser",
+        "--hidden-import",
+        "warnings",
+        "--hidden-import",
+        "threading",
+        "--hidden-import",
+        "ctypes",
+        "--hidden-import",
+        "datetime",
+        "--hidden-import",
+        "re",
+        "--hidden-import",
+        "queue",
+        "--hidden-import",
+        "random",
+        "--hidden-import",
+        "tkinter",
+        "--hidden-import",
+        "json",
         "--clean",
         "PartyFish.py",
     ]

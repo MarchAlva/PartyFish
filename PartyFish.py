@@ -5867,10 +5867,9 @@ def bucket_full_detection_thread():
 
             # 鱼桶满/没鱼饵时的特征：循环异常短
             # 动态阈值计算：基于当前抛竿时间，确保正常循环不会被误判
-            # - 基于当前抛竿时间的1.5倍
-            # - 对于短抛竿时间，设置最小阈值2秒
-            dynamic_threshold = max(1.0, paogantime * 1)
-
+            # - 基于当前抛竿时间的1.0倍
+            # - 对于短抛竿时间，设置最小阈值1秒
+            dynamic_threshold = max(1.5, paogantime * 1.0)
             if last_interval < dynamic_threshold:
                 short_cycle_count += 1
                 print(
@@ -5884,15 +5883,17 @@ def bucket_full_detection_thread():
                     and not fish_bucket_full_detected
                     and not bucket_full_by_interval
                 ):
-                    # 额外验证：检查所有记录的循环是否都异常短
-                    all_short = True
-                    for i in range(1, len(timestamps)):
+                    # 额外验证：检查最近的REQUIRED_SHORT_CYCLES个循环是否都异常短
+                    recent_short_cycles = 0
+                    check_count = min(REQUIRED_SHORT_CYCLES, len(timestamps) - 1)
+                    
+                    for i in range(len(timestamps) - check_count, len(timestamps)):
                         interval = timestamps[i] - timestamps[i - 1]
-                        if interval >= dynamic_threshold:
-                            all_short = False
-                            break
-
-                    if all_short or len(timestamps) <= 5:  # 对于少量记录，直接判定
+                        if interval < dynamic_threshold:
+                            recent_short_cycles += 1
+                    
+                    # 如果最近的check_count个循环都是短循环，或者记录很少，就判定
+                    if recent_short_cycles >= check_count or len(timestamps) <= 5:
                         print(
                             f"🪣  [警告] 连续{short_cycle_count}次短循环，判定为鱼桶满/没鱼饵！"
                         )
