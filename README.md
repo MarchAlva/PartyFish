@@ -286,7 +286,8 @@ PartyFish/
 ## 📝 许可证
 
 本项目采用 [Apache License 2.0](LICENSE) 许可证。
-For more details, see the [LICENSE](LICENSE) and [NOTICE](NOTICE) files.
+更多详情，请参阅 [LICENSE](LICENSE) 和 [NOTICE](NOTICE) 文件。
+
 
 ---
 
