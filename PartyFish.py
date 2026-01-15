@@ -5834,7 +5834,7 @@ def record_caught_fish():
                     screenshot = sct.grab(main_monitor)
 
                     # 创建截图保存目录
-                    screenshot_dir = os.path.join(".", "screenshots")
+                    screenshot_dir = os.path.join(".", "截图", "传奇")
                     os.makedirs(screenshot_dir, exist_ok=True)
 
                     # 生成截图文件名（包含时间戳和鱼名）
@@ -5911,7 +5911,7 @@ def record_caught_fish():
                     screenshot = sct.grab(main_monitor)
 
                     # 创建截图保存目录
-                    screenshot_dir = os.path.join(".", "screenshots")
+                    screenshot_dir = os.path.join(".", "截图", "首次")
                     os.makedirs(screenshot_dir, exist_ok=True)
 
                     # 生成截图文件名（包含时间戳、鱼名和品质）
