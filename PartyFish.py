@@ -4118,7 +4118,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         left_status_frame,
-        text="v.2.9.8 | PartyFish",
+        text="v.2.9.8-beta.1 | PartyFish",
         bootstyle="light",
         font=("Segoe UI", 8, "bold"),
     )
@@ -4560,11 +4560,27 @@ def release_fish():
         keyboard_controller.press(keyboard.KeyCode.from_char("c"))
         time.sleep(1)
 
-        # 2. 把鼠标移动到1090,720（使用与鱼饵识别相同的缩放逻辑）
-        scaled_x1, scaled_y1 = scale_position(
-            1090, 720, anchor="center", coordinate_type="point"
+        # 2. 识别 tong_gray.png 在区域 (1042,675,89,79)
+        # 缩放识别区域
+        scaled_x, scaled_y, scaled_w, scaled_h = scale_position(
+            1042, 675, 89, 79, anchor="top_left", coordinate_type="region"
         )
-        mouse_controller.position = (scaled_x1, scaled_y1)
+        # 截取指定区域
+        region_gray = capture_region(scaled_x, scaled_y, scaled_w, scaled_h, scr)
+        if region_gray is not None:
+            # 加载 tong_gray.png 模板
+            tong_template_path = os.path.join(template_folder_path, "tong_gray.png")
+            if os.path.exists(tong_template_path):
+                img = Image.open(tong_template_path)
+                tong_template = np.array(img)
+                scale = SCALE_UNIFORM  # 使用统一缩放比例
+                tong_template = scale_template(tong_template, scale, scale)
+                # 进行模板匹配
+                res = cv2.matchTemplate(region_gray, tong_template, cv2.TM_CCOEFF_NORMED)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                if max_val > 0.8:  # 匹配度大于0.8认为匹配成功
+                    # 识别成功，继续执行后续操作
+                    pass
         time.sleep(0.5)
 
         # 3. 松开C键
@@ -4591,11 +4607,9 @@ def release_fish():
         mouse_controller.click(mouse.Button.left, 1)
         time.sleep(0.3)
 
-        # 6. 多次按下ESC键，确保退出
-        for i in range(1):  # 按下1次ESC键
-            keyboard_controller.tap(keyboard.Key.esc)  # 使用tap方法，自动处理按下和释放
-            time.sleep(0.5)  # 每次按下后等待
-        time.sleep(0.5)
+        # 6. 按下ESC键退出
+        keyboard_controller.tap(keyboard.Key.esc)  # 使用tap方法，自动处理按下和释放
+        time.sleep(0.5)  # 按下后等待
 
         print("✅ [放生] 放生操作执行成功")
         return True
@@ -4625,7 +4639,7 @@ def should_release_fish(quality, fish_name=""):
     )
 
     # 幻神稀有鱼列表
-    phantom_rare_fishes = ["地包天鱼", "黄鸭叫", "辐射鲈", "鬼刀鱼", "鬼虎鱼", "鬼牙鱼", "芭蕃蓬蓬鱼", "幻光鱼", "甲方满意鱼", "蓝眼泪", "飞机头", "鳅鳅鱼", "拟岩鱼", "粗红线", "水法老", "大罐子鱼"]
+    phantom_rare_fishes = ["地包天鱼", "黄鸭叫", "辐射鲈", "鬼刀鱼", "鬼虎鱼", "鬼牙鱼", "芭蕃蓬蓬鱼", "幻光鱼", "甲方满意鱼", "蓝眼泪", "飞机头", "鳅鳅鱼", "拟岩鱼", "粗红线", "水法老", "大罐子鱼", "粉丝虾", "狼蛛蟹", "金蛙", "拳击虾", "大师龟"]
     
     # 检查是否是幻神稀有鱼
     if fish_name in phantom_rare_fishes and release_phantom_rare_enabled:
@@ -4781,11 +4795,17 @@ def update_region_coords():
     region5_coords = scale_coords_bottom_anchored(1212, 1329, 10, 19)
     # 上鱼右键 - 底部中央区域
     region6_coords = scale_coords_bottom_anchored(1146, 1316, 17, 21)
-    # 加时界面检测区域 - 使用加时专用的中心锚定缩放
-    jiashi_region_coords = jiashi_scale_coords_center_anchored(*JIASHI_REGION_BASE)
-    # 加时按钮坐标 - 使用加时专用的中心锚定缩放
-    btn_no_jiashi_coords = jiashi_scale_point_center_anchored(*BTN_NO_JIASHI_BASE)
-    btn_yes_jiashi_coords = jiashi_scale_point_center_anchored(*BTN_YES_JIASHI_BASE)
+    # 加时界面检测区域 - 使用与鱼饵识别相同的缩放逻辑
+    jiashi_region_coords = scale_position(
+        *JIASHI_REGION_BASE, anchor="center", coordinate_type="region"
+    )
+    # 加时按钮坐标 - 使用与鱼饵识别相同的缩放逻辑
+    btn_no_jiashi_coords = scale_position(
+        *BTN_NO_JIASHI_BASE, anchor="center", coordinate_type="point"
+    )
+    btn_yes_jiashi_coords = scale_position(
+        *BTN_YES_JIASHI_BASE, anchor="center", coordinate_type="point"
+    )
     # 当坐标更新时，检查是否需要重新加载模板
     reload_templates_if_scale_changed()
 
@@ -7963,7 +7983,7 @@ if __name__ == "__main__":
     print()
     print("╔" + "═" * 50 + "╗")
     print("║" + " " * 50 + "║")
-    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9.8".ljust(44) + "║")
+    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9.8-beta.1".ljust(44) + "║")
     print("║" + " " * 50 + "║")
     print("╠" + "═" * 50 + "╣")
     print(
