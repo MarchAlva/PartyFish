@@ -334,6 +334,7 @@ param_lock = threading.Lock()  # 参数读写锁
 # =========================
 record_fish_enabled = True  # 默认启用钓鱼记录
 legendary_screenshot_enabled = True  # 默认关闭传奇鱼自动截屏
+first_capture_screenshot_enabled = True  # 默认启用首次捕获自动截屏
 
 # =========================
 # 放生功能设置
@@ -816,6 +817,7 @@ def save_parameters():
         "uno_hotkey": uno_hotkey_name,
         "record_fish_enabled": record_fish_enabled,
         "legendary_screenshot_enabled": legendary_screenshot_enabled,
+        "first_capture_screenshot_enabled": first_capture_screenshot_enabled,
         "font_size": font_size,
         "jitter_range": JITTER_RANGE,
         "fish_bucket_sound_enabled": fish_bucket_sound_enabled,
@@ -845,7 +847,7 @@ def load_parameters():
     global t, leftclickdown, leftclickup, times, paogantime, jiashi_var
     global resolution_choice, TARGET_WIDTH, TARGET_HEIGHT, SCALE_X, SCALE_Y
     global hotkey_name, hotkey_modifiers, hotkey_main_key
-    global font_size, record_fish_enabled, legendary_screenshot_enabled
+    global font_size, record_fish_enabled, legendary_screenshot_enabled, first_capture_screenshot_enabled
     global config_names, config_params, current_config_index
     global JITTER_RANGE
     global bait_recognition_algorithm  # 新增加载鱼饵识别算法
@@ -879,6 +881,10 @@ def load_parameters():
             # 加载传奇鱼自动截屏开关状态
             legendary_screenshot_enabled = params.get(
                 "legendary_screenshot_enabled", True
+            )
+            # 加载首次捕获自动截屏开关状态
+            first_capture_screenshot_enabled = params.get(
+                "first_capture_screenshot_enabled", True
             )
             # 加载字体大小设置
             font_size = params.get("font_size", 100)  # 默认100%
@@ -1059,6 +1065,7 @@ def update_parameters(
     hotkey_var=None,
     record_fish_var=None,
     legendary_screenshot_var=None,
+    first_capture_screenshot_var=None,
     jitter_var=None,
     uno_hotkey_var_param=None,
     release_enabled_var=None,
@@ -1067,13 +1074,14 @@ def update_parameters(
     release_rare_var=None,
     release_epic_var=None,
     release_legendary_var=None,
+    release_phantom_rare_var=None,
 ):
     global t, leftclickdown, leftclickup, times, paogantime, jiashi_var
     global resolution_choice, TARGET_WIDTH, TARGET_HEIGHT, SCALE_X, SCALE_Y
     global hotkey_name, hotkey_modifiers, hotkey_main_key
-    global record_fish_enabled, legendary_screenshot_enabled, JITTER_RANGE, fish_bucket_sound_enabled
+    global record_fish_enabled, legendary_screenshot_enabled, first_capture_screenshot_enabled, JITTER_RANGE, fish_bucket_sound_enabled
     global uno_hotkey_name, uno_hotkey_modifiers, uno_hotkey_main_key
-    global release_fish_enabled, release_standard_enabled, release_uncommon_enabled, release_rare_enabled, release_epic_enabled, release_legendary_enabled
+    global release_fish_enabled, release_standard_enabled, release_uncommon_enabled, release_rare_enabled, release_epic_enabled, release_legendary_enabled, release_phantom_rare_enabled
     with param_lock:  # 使用锁保护参数更新
         try:
             t = float(t_var.get())
@@ -1090,6 +1098,10 @@ def update_parameters(
             # 更新传奇鱼自动截屏开关状态
             if legendary_screenshot_var is not None:
                 legendary_screenshot_enabled = bool(legendary_screenshot_var.get())
+
+            # 更新首次捕获自动截屏开关状态
+            if first_capture_screenshot_var is not None:
+                first_capture_screenshot_enabled = bool(first_capture_screenshot_var.get())
 
             # 更新时间抖动范围
             if jitter_var is not None:
@@ -2296,6 +2308,7 @@ def create_gui():
             hotkey_var,
             record_fish_var,
             legendary_screenshot_var,
+            first_capture_screenshot_var,
             jitter_var=jitter_var,
         )
         jitter_value_label.configure(text=f"{jitter_var.get()}%")
@@ -2760,6 +2773,7 @@ def create_gui():
             hotkey_var,
             record_fish_var,
             legendary_screenshot_var,
+            first_capture_screenshot_var,
         )
 
     # 创建分辨率选择按钮（3行2列布局）
@@ -2857,6 +2871,7 @@ def create_gui():
                 hotkey_var,
                 record_fish_var,
                 legendary_screenshot_var,
+                first_capture_screenshot_var,
             )
 
     custom_width_entry.bind("<FocusOut>", on_custom_width_change)
@@ -2979,6 +2994,40 @@ def create_gui():
         bootstyle="danger-outline-toolbutton",
     )
     legendary_no.pack(side=LEFT, padx=5)
+
+    # 首次捕获自动截屏开关
+    first_capture_screenshot_var = ttkb.IntVar(
+        value=1 if first_capture_screenshot_enabled else 0
+    )
+
+    first_capture_frame = ttkb.Frame(record_card)
+    first_capture_frame.pack(fill=X, pady=4)
+
+    first_capture_label = ttkb.Label(
+        first_capture_frame, text="首次捕获自动截屏", font=("Segoe UI", 9), bootstyle="info"
+    )
+    first_capture_label.pack(side=LEFT, padx=(0, 8))
+
+    first_capture_btn_frame = ttkb.Frame(first_capture_frame)
+    first_capture_btn_frame.pack(side=RIGHT)
+
+    first_capture_yes = ttkb.Radiobutton(
+        first_capture_btn_frame,
+        text="是",
+        variable=first_capture_screenshot_var,
+        value=1,
+        bootstyle="success-outline-toolbutton",
+    )
+    first_capture_yes.pack(side=LEFT, padx=5)
+
+    first_capture_no = ttkb.Radiobutton(
+        first_capture_btn_frame,
+        text="否",
+        variable=first_capture_screenshot_var,
+        value=0,
+        bootstyle="danger-outline-toolbutton",
+    )
+    first_capture_no.pack(side=LEFT, padx=5)
 
     # ==================== UNO UI ====================
     # 添加UNO的UI元素
@@ -4118,7 +4167,7 @@ def create_gui():
 
     version_label = ttkb.Label(
         left_status_frame,
-        text="v.2.9.8-beta.1 | PartyFish",
+        text="v.2.10 | PartyFish",
         bootstyle="light",
         font=("Segoe UI", 8, "bold"),
     )
@@ -4579,8 +4628,14 @@ def release_fish():
                 res = cv2.matchTemplate(region_gray, tong_template, cv2.TM_CCOEFF_NORMED)
                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
                 if max_val > 0.8:  # 匹配度大于0.8认为匹配成功
-                    # 识别成功，继续执行后续操作
-                    pass
+                    # 4. 点击1090,720（左键）
+                    scaled_click_x, scaled_click_y = scale_position(
+                        1090, 720, anchor="center", coordinate_type="point"
+                    )
+                    mouse_controller.position = (scaled_click_x, scaled_click_y)
+                    time.sleep(0.3)
+                    mouse_controller.click(mouse.Button.left, 1)
+                    time.sleep(0.3)
         time.sleep(0.5)
 
         # 3. 松开C键
@@ -5356,6 +5411,7 @@ def recognize_fish_info_ocr(img):
         fish_name = None
         fish_quality = None
         fish_weight = None
+        is_first_capture = False
 
         if len(result) > 0 and full_text:
             # 识别品质
@@ -5386,6 +5442,10 @@ def recognize_fish_info_ocr(img):
             for pattern in fish_name_patterns:
                 match = re.search(pattern, full_text)
                 if match:
+                    # 检查是否是首次捕获
+                    if "首次" in match.group(0) or "首次" in full_text:
+                        is_first_capture = True
+                    
                     extracted_name = match.group(1).strip()
                     # 清理鱼名中的数字、单位和特殊字符
                     extracted_name = re.sub(
@@ -5539,9 +5599,9 @@ def recognize_fish_info_ocr(img):
             add_debug_info(debug_info)
 
         if len(result) == 0 or not full_text:
-            return None, None, None
+            return None, None, None, False
 
-        return fish_name, fish_quality, fish_weight
+        return fish_name, fish_quality, fish_weight, is_first_capture
 
     except Exception as e:
         print(f"❌ [错误] OCR识别失败: {e}")
@@ -5635,7 +5695,7 @@ def record_caught_fish():
         add_debug_info(debug_info)
 
     # OCR识别
-    fish_name, fish_quality, fish_weight = recognize_fish_info_ocr(img)
+    fish_name, fish_quality, fish_weight, is_first_capture = recognize_fish_info_ocr(img)
 
     # 调试信息：记录OCR识别结果
     if debug_mode:
@@ -5713,11 +5773,6 @@ def record_caught_fish():
         print(
             f"🐟 [钓到] {quality_emoji} {fish.name} | 品质: {fish.quality} | 重量: {fish.weight}"
         )
-
-        # 鼠标左键收起
-        print("🐠 [操作] 执行鼠标左键收起")
-        mouse_controller.click(mouse.Button.left, 1)
-        time.sleep(0.3)
 
         # 传奇鱼自动截屏
         if legendary_screenshot_enabled and fish.quality in ["传奇", "傳奇"]:
@@ -5807,6 +5862,89 @@ def record_caught_fish():
                         "exception_type": type(e).__name__,
                     }
                     add_debug_info(debug_info)
+
+        # 首次捕获截图
+        if first_capture_screenshot_enabled and is_first_capture:
+            try:
+                # 调试信息：记录开始首次捕获截屏
+                if debug_mode:
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S.%f"
+                        )[:-3],
+                        "action": "first_capture_screenshot_start",
+                        "message": "开始首次捕获自动截屏",
+                    }
+                    add_debug_info(debug_info)
+
+                # 使用mss截取主显示器全屏
+                with mss.mss() as sct:
+                    # 选择主显示器
+                    main_monitor = None
+                    for i, monitor in enumerate(
+                        sct.monitors[1:]
+                    ):
+                        if monitor["left"] == 0 and monitor["top"] == 0:
+                            main_monitor = monitor
+                            break
+                    if main_monitor is None:
+                        main_monitor = sct.monitors[1]
+
+                    # 强制使用确定的主显示器进行截屏
+                    screenshot = sct.grab(main_monitor)
+
+                    # 创建截图保存目录
+                    screenshot_dir = os.path.join(".", "screenshots")
+                    os.makedirs(screenshot_dir, exist_ok=True)
+
+                    # 生成截图文件名（包含时间戳和鱼名）
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    fish_name_clean = re.sub(r"[^]", "", fish.name)
+                    screenshot_path = os.path.join(
+                        screenshot_dir,
+                        f"{timestamp}_{fish_name_clean}_首次捕获.png",
+                    )
+
+                    # 保存截图
+                    mss.tools.to_png(
+                        screenshot.rgb, screenshot.size, output=screenshot_path
+                    )
+                    print(
+                        f"📸 [截屏] 首次捕获已自动保存到主显示器截图: {screenshot_path}"
+                    )
+
+                    # 调试信息：记录首次捕获截屏成功
+                    if debug_mode:
+                        debug_info = {
+                            "timestamp": datetime.datetime.now().strftime(
+                                "%Y-%m-%d %H:%M:%S.%f"
+                            )[:-3],
+                            "action": "first_capture_screenshot_success",
+                            "message": "首次捕获自动截屏成功",
+                            "screenshot_path": screenshot_path,
+                            "monitor_info": monitor,
+                        }
+                        add_debug_info(debug_info)
+            except Exception as e:
+                print(f"❌ [错误] 首次捕获截图失败: {e}")
+                # 调试信息：记录首次捕获截屏失败
+                if debug_mode:
+                    debug_info = {
+                        "timestamp": datetime.datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S.%f"
+                        )[:-3],
+                        "action": "first_capture_screenshot_failed",
+                        "message": "首次捕获自动截屏失败",
+                        "error": str(e),
+                        "exception_type": type(e).__name__,
+                    }
+                    add_debug_info(debug_info)
+        
+        # 鼠标左键收起 - 截图完成后再收起
+        print("🐠 [操作] 执行鼠标左键收起")
+        mouse_controller.click(mouse.Button.left, 1)
+        time.sleep(0.3)
+
         # 放生判断和执行
         if release_fish_enabled:  # 先检查全局开关是否开启
             if should_release_fish(fish.quality, fish.name):  # 再检查鱼的稀有度
@@ -7983,7 +8121,7 @@ if __name__ == "__main__":
     print()
     print("╔" + "═" * 50 + "╗")
     print("║" + " " * 50 + "║")
-    print("║     🎣  PartyFish 自动钓鱼助手  v.2.9.8-beta.1".ljust(44) + "║")
+    print("║     🎣  PartyFish 自动钓鱼助手  v.2.10".ljust(44) + "║")
     print("║" + " " * 50 + "║")
     print("╠" + "═" * 50 + "╣")
     print(
