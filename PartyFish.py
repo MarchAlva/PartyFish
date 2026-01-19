@@ -5079,30 +5079,25 @@ def scale_coords_center_anchored(base_x, base_y, base_w, base_h):
 # =========================
 def jiashi_scale_point(x, y):
     """加时功能专用的单点缩放函数"""
-    # 使用全局统一缩放比例
-    return (int(x * SCALE_UNIFORM), int(y * SCALE_UNIFORM))
+    # 使用bottom_right锚定的缩放方式
+    return scale_position(x, y, anchor="bottom_right", coordinate_type="point")
 
 
 def jiashi_scale_region(x, y, w, h):
     """加时功能专用的区域缩放函数"""
-    # 使用全局统一缩放比例
-    return (
-        int(x * SCALE_UNIFORM),
-        int(y * SCALE_UNIFORM),
-        int(w * SCALE_UNIFORM),
-        int(h * SCALE_UNIFORM),
-    )
+    # 使用bottom_right锚定的缩放方式
+    return scale_position(x, y, w, h, anchor="bottom_right", coordinate_type="region")
 
 
 def jiashi_scale_point_center_anchored(x, y):
     """加时功能专用的中心锚定单点缩放函数"""
-    # 使用全局统一缩放比例
+    # 使用中心锚定的缩放方式
     return scale_position(x, y, anchor="center", coordinate_type="point")
 
 
 def jiashi_scale_coords_center_anchored(x, y, w, h):
     """加时功能专用的中心锚定区域缩放函数"""
-    # 使用全局统一缩放比例
+    # 使用中心锚定的缩放方式
     return scale_position(x, y, w, h, anchor="center", coordinate_type="region")
 
 
@@ -5143,7 +5138,7 @@ def get_jiashi_region_by_resolution():
     else:
         # 如果没有匹配的分辨率，使用默认的缩放逻辑
         return scale_position(
-            *JIASHI_REGION_BASE, anchor="center", coordinate_type="region"
+            *JIASHI_REGION_BASE, anchor="bottom_right", coordinate_type="region"
         )
 
 
@@ -5164,12 +5159,12 @@ def update_region_coords():
     region6_coords = scale_coords_bottom_anchored(1146, 1316, 17, 21)
     # 加时界面检测区域 - 根据分辨率使用预设值
     jiashi_region_coords = get_jiashi_region_by_resolution()
-    # 加时按钮坐标 - 使用底部中心锚定，与识别区域保持一致
+    # 加时按钮坐标 - 使用中心锚定，与识别区域保持一致
     btn_no_jiashi_coords = scale_position(
-        *BTN_NO_JIASHI_BASE, anchor="bottom_center", coordinate_type="point"
+        *BTN_NO_JIASHI_BASE, anchor="center", coordinate_type="point"
     )
     btn_yes_jiashi_coords = scale_position(
-        *BTN_YES_JIASHI_BASE, anchor="bottom_center", coordinate_type="point"
+        *BTN_YES_JIASHI_BASE, anchor="center", coordinate_type="point"
     )
     # 当坐标更新时，检查是否需要重新加载模板
     reload_templates_if_scale_changed()
@@ -6782,8 +6777,8 @@ BAIT_REGION_BASE = (2318, 1296, 2348, 1318)
 # 加时界面检测区域（基准值）
 JIASHI_REGION_BASE = (1244, 674, 29, 29)
 # 点击按钮位置（基准值）
-BTN_NO_JIASHI_BASE = (1175, 778)  # 不加时按钮
-BTN_YES_JIASHI_BASE = (1390, 778)  # 加时按钮
+BTN_NO_JIASHI_BASE = (1172, 784)  # 不加时按钮
+BTN_YES_JIASHI_BASE = (1387, 784)  # 加时按钮
 # 加时相关坐标缓存（用于分辨率变化时自动更新）
 jiashi_region_coords = None  # 加时检测区域
 btn_no_jiashi_coords = None  # 不加时按钮
