@@ -6144,27 +6144,21 @@ def record_caught_fish():
                     }
                     add_debug_info(debug_info)
 
-                # 使用mss截取主显示器全屏
+                # 使用当前屏幕分辨率进行截图
+                current_width, current_height = get_current_screen_resolution()
+                
+                # 使用mss截取当前分辨率的屏幕
                 with mss.mss() as sct:
-                    # 选择主显示器 - 通常index 1是主显示器，但有些系统可能不同
-                    # 主显示器通常具有最小的left和top值（0,0坐标）
-                    main_monitor = None
-                    for i, monitor in enumerate(
-                        sct.monitors[1:]
-                    ):  # 跳过index 0（所有显示器组合）
-                        if monitor["left"] == 0 and monitor["top"] == 0:
-                            main_monitor = monitor
-                            break
-
-                    # 如果找不到坐标0,0的显示器，使用默认的index 1
-                    if main_monitor is None:
-                        main_monitor = sct.monitors[1]
-                        print(
-                            f"📌 [调试] 未找到坐标0,0的显示器，使用默认显示器1: {main_monitor}"
-                        )
-
-                    # 强制使用确定的主显示器进行截屏
-                    screenshot = sct.grab(main_monitor)
+                    # 创建一个与当前分辨率匹配的截图区域
+                    monitor = {
+                        "top": 0,
+                        "left": 0,
+                        "width": current_width,
+                        "height": current_height
+                    }
+                    
+                    # 执行截图
+                    screenshot = sct.grab(monitor)
 
                     # 创建截图保存目录
                     screenshot_dir = os.path.join(".", "截图", "传奇")
@@ -6178,33 +6172,10 @@ def record_caught_fish():
                         f"{timestamp}_{fish_name_clean}_{fish.quality}.png",
                     )
 
-                    # 将截图转换为numpy数组，用于裁剪黑色边框
-                    img = np.array(screenshot)
-                    
-                    # 裁剪黑色边框
-                    # 转换为灰度图，用于检测边框
-                    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                    
-                    # 找到非黑色区域的边界
-                    non_black_pixels = np.where(gray > 10)  # 10是黑色阈值，可以调整
-                    
-                    if len(non_black_pixels[0]) > 0:  # 确保有非黑色像素
-                        # 获取边界坐标
-                        top = non_black_pixels[0].min()
-                        bottom = non_black_pixels[0].max()
-                        left = non_black_pixels[1].min()
-                        right = non_black_pixels[1].max()
-                        
-                        # 裁剪图像，去除黑色边框
-                        cropped_img = img[top:bottom+1, left:right+1]
-                        
-                        # 保存裁剪后的图像
-                        Image.fromarray(cropped_img).save(screenshot_path)
-                    else:
-                        # 如果全黑，保存原始图像
-                        mss.tools.to_png(
-                            screenshot.rgb, screenshot.size, output=screenshot_path
-                        )
+                    # 保存截图
+                    mss.tools.to_png(
+                        screenshot.rgb, screenshot.size, output=screenshot_path
+                    )
                     print(
                         f"📸 [截屏] 传奇鱼已自动保存到主显示器截图: {screenshot_path}"
                     )
@@ -6250,21 +6221,21 @@ def record_caught_fish():
                     }
                     add_debug_info(debug_info)
 
-                # 使用mss截取主显示器全屏
+                # 使用当前屏幕分辨率进行截图
+                current_width, current_height = get_current_screen_resolution()
+                
+                # 使用mss截取当前分辨率的屏幕
                 with mss.mss() as sct:
-                    # 选择主显示器
-                    main_monitor = None
-                    for i, monitor in enumerate(
-                        sct.monitors[1:]
-                    ):
-                        if monitor["left"] == 0 and monitor["top"] == 0:
-                            main_monitor = monitor
-                            break
-                    if main_monitor is None:
-                        main_monitor = sct.monitors[1]
-
-                    # 强制使用确定的主显示器进行截屏
-                    screenshot = sct.grab(main_monitor)
+                    # 创建一个与当前分辨率匹配的截图区域
+                    monitor = {
+                        "top": 0,
+                        "left": 0,
+                        "width": current_width,
+                        "height": current_height
+                    }
+                    
+                    # 执行截图
+                    screenshot = sct.grab(monitor)
 
                     # 创建截图保存目录
                     screenshot_dir = os.path.join(".", "截图", "首次")
@@ -6278,33 +6249,10 @@ def record_caught_fish():
                         f"{timestamp}_{fish_name_clean}_{fish.quality}_首次捕获.png",
                     )
 
-                    # 将截图转换为numpy数组，用于裁剪黑色边框
-                    img = np.array(screenshot)
-                    
-                    # 裁剪黑色边框
-                    # 转换为灰度图，用于检测边框
-                    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                    
-                    # 找到非黑色区域的边界
-                    non_black_pixels = np.where(gray > 10)  # 10是黑色阈值，可以调整
-                    
-                    if len(non_black_pixels[0]) > 0:  # 确保有非黑色像素
-                        # 获取边界坐标
-                        top = non_black_pixels[0].min()
-                        bottom = non_black_pixels[0].max()
-                        left = non_black_pixels[1].min()
-                        right = non_black_pixels[1].max()
-                        
-                        # 裁剪图像，去除黑色边框
-                        cropped_img = img[top:bottom+1, left:right+1]
-                        
-                        # 保存裁剪后的图像
-                        Image.fromarray(cropped_img).save(screenshot_path)
-                    else:
-                        # 如果全黑，保存原始图像
-                        mss.tools.to_png(
-                            screenshot.rgb, screenshot.size, output=screenshot_path
-                        )
+                    # 保存截图
+                    mss.tools.to_png(
+                        screenshot.rgb, screenshot.size, output=screenshot_path
+                    )
                     print(
                         f"📸 [截屏] 首次捕获已自动保存到主显示器截图: {screenshot_path}"
                     )
