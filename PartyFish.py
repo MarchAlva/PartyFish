@@ -271,35 +271,6 @@ def get_hardware_info():
     except Exception as e:
         hardware_info['memory'] = f"获取失败: {e}"
     
-    # 获取硬盘信息
-    try:
-        if WMI_AVAILABLE:
-            w = wmi.WMI()
-            disk_info = []
-            for disk in w.Win32_DiskDrive():
-                if disk.Model:
-                    disk_info.append(disk.Model.strip())
-            hardware_info['disk'] = ", ".join(disk_info) if disk_info else "未知"
-        else:
-            hardware_info['disk'] = "获取失败: wmi不可用"
-    except Exception as e:
-        hardware_info['disk'] = f"获取失败: {e}"
-    
-    # 获取网卡信息
-    try:
-        if PSUTIL_AVAILABLE:
-            net_if_addrs = psutil.net_if_addrs()
-            mac_addresses = []
-            for interface_name, addresses in net_if_addrs.items():
-                for address in addresses:
-                    if address.family == psutil.AF_LINK:
-                        mac_addresses.append(address.address)
-            hardware_info['network'] = ", ".join(mac_addresses) if mac_addresses else "未知"
-        else:
-            hardware_info['network'] = "获取失败: psutil不可用"
-    except Exception as e:
-        hardware_info['network'] = f"获取失败: {e}"
-    
     # 获取GPU信息
     try:
         if WMI_AVAILABLE:
