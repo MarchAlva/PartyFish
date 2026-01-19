@@ -287,7 +287,7 @@ def get_hardware_info():
     
     # 格式化硬件信息字符串，按照顺序：cpu|内存|硬盘|网卡|gpu型号
     # 保留username和cpu_serial作为前两个字段，保持与现有逻辑兼容
-    hardware_str = f"{hardware_info['username']}|{hardware_info['cpu_model']}|{hardware_info['memory']}|{hardware_info['disk']}|{hardware_info['network']}|{hardware_info['gpu_model']}"
+    hardware_str = f"{hardware_info['username']}|{hardware_info['cpu_model']}|{hardware_info['memory']}|{hardware_info['gpu_model']}"
     return hardware_str
 
 
