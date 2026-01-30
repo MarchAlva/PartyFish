@@ -2069,9 +2069,9 @@ def create_gui():
     global uno_input1_var, uno_input2_var, uno_popup_shown, root
 
     # 创建现代化主题窗口
-    root = ttkb.Window(themename="darkly")  # 使用深色主题
+    root = ttkb.Window(themename="superhero")  # 使用深色主题
     root.title("🎣 PartyFish 自动钓鱼助手")
-    root.geometry("1110x1000")  # 增大窗口高度，为运行日志留出空间
+    root.geometry("1110x960")  # 增大窗口高度，为运行日志留出空间
     root.minsize(840, 650)  # 调整最小尺寸，确保运行日志区域可见
     root.maxsize(2560, 1600)  # 调整最大尺寸，支持更大的显示器
     root.resizable(True, True)  # 允许调整大小
@@ -2626,7 +2626,7 @@ def create_gui():
         values=list(bait_recognition_algorithms.values()),
         state="readonly",
         font=(("微软雅黑", 9)),
-        width=15,
+        width=12,
     )
     # 初始化为当前算法的中文名称
     bait_algorithm_var.set(current_algorithm_name)
@@ -3836,6 +3836,7 @@ def create_gui():
         textvariable=standard_var,
         foreground="#94A3B8",
         font=("微软雅黑", 9, "bold"),
+        width=20,
     )
     standard_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3844,6 +3845,7 @@ def create_gui():
         textvariable=uncommon_var,
         foreground="#34D399",
         font=("微软雅黑", 9, "bold"),
+        width=20,
     )
     uncommon_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3852,6 +3854,7 @@ def create_gui():
         textvariable=rare_var,
         foreground="#60A5FA",
         font=("微软雅黑", 9, "bold"),
+        width=20,
     )
     rare_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3864,6 +3867,7 @@ def create_gui():
         textvariable=epic_var,
         foreground="#A78BFA",
         font=("微软雅黑", 9, "bold"),
+        width=20,
     )
     epic_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3872,6 +3876,7 @@ def create_gui():
         textvariable=legendary_var,
         foreground="#FBBF24",
         font=("微软雅黑", 9, "bold"),
+        width=20,
     )
     legendary_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3880,6 +3885,7 @@ def create_gui():
         textvariable=total_var,
         foreground="#64748B",
         font=("微软雅黑", 9, "bold"),
+        width=20,
     )
     total_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
