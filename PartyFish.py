@@ -68,9 +68,11 @@ HARDWARE_INFO_SAVE_KEY = "hardware_info"
 
 def verify_card_key():
     """
-    验证卡密，绑定硬件信息
-    每次启动时调用，硬件信息不一致则需要重新输入卡密
+    已移除卡密验证（保持接口以兼容原有结构）
     """
+    print("🔓 [卡密] 已关闭卡密验证，直接启动")
+    return
+    
     # 先加载参数，获取保存的卡密和硬件信息
     load_parameters()
     
