@@ -19,6 +19,10 @@ pyinstaller --noconfirm ^
     --hidden-import=mss ^
     --hidden-import=yaml ^
     --hidden-import=winsound ^
+    --hidden-import=six ^          :: 新增：补充six依赖
+    --hidden-import=onnx ^         :: 新增：补充onnx依赖
+    --hidden-import=wmi ^          :: 新增：补充wmi依赖
+    --hidden-import=psutil ^       :: 新增：补充psutil依赖
     PartyFish.py
 
 echo 打包完成！
