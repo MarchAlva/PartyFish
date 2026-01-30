@@ -154,11 +154,11 @@ def verify_card_key():
             frame.pack(fill=tk.BOTH, expand=True)
             
             # 标题
-            title_label = tk.Label(frame, text="请输入卡密", font=("Segoe UI", 14, "bold"))
+            title_label = tk.Label(frame, text="请输入卡密", font=("微软雅黑", 14, "bold"))
             title_label.pack(pady=(0, 20))
             
             # 卡密输入框
-            card_key_entry = tk.Entry(frame, textvariable=card_key, font=("Segoe UI", 12), width=30)
+            card_key_entry = tk.Entry(frame, textvariable=card_key, font=("微软雅黑", 12), width=30)
             card_key_entry.pack(pady=(0, 20))
             card_key_entry.focus_set()  # 设置焦点
             
@@ -764,7 +764,7 @@ def init_font_styles(style, font_size_percent):
     scale_factor = font_size_percent / 100.0
 
     # 基础字体设置
-    base_font = "Segoe UI"
+    base_font = "微软雅黑"
 
     # 定义不同控件的字体大小
     font_sizes = {
@@ -936,7 +936,7 @@ def update_all_widget_fonts(widget, style, font_size_percent):
 
     # 缩放因子
     scale_factor = font_size_percent / 100.0
-    base_font = "Segoe UI"
+    base_font = "微软雅黑"
 
     # 定义默认字体大小
     default_sizes = {
@@ -1535,7 +1535,7 @@ def show_debug_window():
     title_label = ttkb.Label(
         main_frame,
         text="OCR 调试信息",
-        font=("Segoe UI", 14, "bold"),
+        font=("微软雅黑", 14, "bold"),
         bootstyle="primary",
     )
     title_label.pack(pady=(0, 10))
@@ -1574,7 +1574,7 @@ def show_debug_window():
 
     resolution_label = ttkb.Label(
         control_frame,
-        font=("Consolas", 10),  # 增大字体大小，提高可读性
+        font=("微软雅黑", 10),  # 增大字体大小，提高可读性
         bootstyle="info",
     )
     resolution_label.pack(side=TOP, fill=X, pady=(5, 0))  # 调整为顶部填充，增加垂直间距
@@ -1782,7 +1782,7 @@ def show_debug_window():
     debug_text = tk.Text(
         info_frame,
         wrap="word",
-        font=("Consolas", 10),
+        font=("微软雅黑", 10),
         bg="#1e1e1e",
         fg="#d4d4d4",
         insertbackground="white",
@@ -2145,13 +2145,13 @@ def create_gui():
     title_label = ttkb.Label(
         title_frame,
         text="🎣 PartyFish",
-        font=("Segoe UI", 16, "bold"),
+        font=("微软雅黑", 16, "bold"),
         bootstyle="primary",
     )
     title_label.pack()
 
     subtitle_label = ttkb.Label(
-        title_frame, text="自动钓鱼助手", font=("Segoe UI", 10), bootstyle="secondary"
+        title_frame, text="自动钓鱼助手", font=("微软雅黑", 10), bootstyle="secondary"
     )
     subtitle_label.pack(pady=(2, 0))
 
@@ -2422,7 +2422,7 @@ def create_gui():
     tip_label = ttkb.Label(
         config_frame,
         text="可右键点击修改名字",
-        font=("Segoe UI", 8),
+        font=("微软雅黑", 8),
         bootstyle="info",
         anchor="center",
     )
@@ -2438,11 +2438,11 @@ def create_gui():
     def create_param_row(parent, label_text, var, row, tooltip=""):
         # 使用更紧凑的布局
         label = ttkb.Label(
-            parent, text=label_text, font=("Segoe UI", 9), bootstyle="info"
+            parent, text=label_text, font=("微软雅黑", 9), bootstyle="info"
         )
         label.grid(row=row, column=0, sticky=W, pady=4, padx=(0, 8))
 
-        entry = ttkb.Entry(parent, textvariable=var, width=12, font=("Segoe UI", 9))
+        entry = ttkb.Entry(parent, textvariable=var, width=12, font=("微软雅黑", 9))
         entry.grid(row=row, column=1, sticky=E, pady=4)
 
         # 保存输入框引用到全局列表
@@ -2486,7 +2486,7 @@ def create_gui():
     jiashi_frame.pack(fill=X, pady=4)
 
     jiashi_label = ttkb.Label(
-        jiashi_frame, text="是否自动加时", font=("Segoe UI", 9), bootstyle="warning"
+        jiashi_frame, text="是否自动加时", font=("微软雅黑", 9), bootstyle="warning"
     )
     jiashi_label.pack(side=LEFT, padx=4)
 
@@ -2529,7 +2529,7 @@ def create_gui():
         jitter_frame,
         text="时间抖动范围 (±%):",
         bootstyle="warning",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
     )
     jitter_label.pack(side=LEFT, padx=(0, 4))
 
@@ -2551,7 +2551,7 @@ def create_gui():
         jitter_frame,
         text=f"{jitter_var.get()}%",
         bootstyle="warning",
-        font=("Segoe UI", 10, "bold"),
+        font=("微软雅黑", 10, "bold"),
     )
     jitter_value_label.pack(side=LEFT, padx=(0, 2))
 
@@ -2560,7 +2560,7 @@ def create_gui():
         jitter_card,
         text="随机波动避免检测",
         bootstyle="info",
-        font=("Segoe UI", 8),
+        font=("微软雅黑", 8),
     )
     jitter_info_label.pack(pady=(4, 2), padx=2)
 
@@ -2612,7 +2612,7 @@ def create_gui():
         algorithm_frame,
         text="识别算法:",
         bootstyle="primary",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
     )
     algorithm_label.pack(side=LEFT, padx=(0, 8))
 
@@ -2625,7 +2625,7 @@ def create_gui():
         textvariable=bait_algorithm_var,
         values=list(bait_recognition_algorithms.values()),
         state="readonly",
-        font=(("Segoe UI", 9)),
+        font=(("微软雅黑", 9)),
         width=15,
     )
     # 初始化为当前算法的中文名称
@@ -2637,7 +2637,7 @@ def create_gui():
         algorithm_frame,
         text=bait_recognition_algorithms[bait_recognition_algorithm],
         bootstyle="info",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
     )
     algorithm_desc_label.pack(side=LEFT, padx=(0, 8))
 
@@ -2680,7 +2680,7 @@ def create_gui():
 
     # 音效开关标签
     sound_label = ttkb.Label(
-        sound_frame, text="启用警告音效", bootstyle="warning", font=("Segoe UI", 9)
+        sound_frame, text="启用警告音效", bootstyle="warning", font=("微软雅黑", 9)
     )
     sound_label.pack(side=LEFT, padx=(0, 5), pady=0)
 
@@ -2729,7 +2729,7 @@ def create_gui():
     mode_frame.pack(fill=X, pady=(8, 0))
 
     ttkb.Label(
-        mode_frame, text="运行模式:", bootstyle="warning", font=("Segoe UI", 9, "bold")
+        mode_frame, text="运行模式:", bootstyle="warning", font=("微软雅黑", 9, "bold")
     ).pack(anchor=CENTER, pady=(0, 4))
 
     # 创建按钮组容器
@@ -2779,7 +2779,7 @@ def create_gui():
 
     # 说明文字
     info_label = ttkb.Label(
-        bucket_card, text="按照选择的模式执行", bootstyle="info", font=("Segoe UI", 8)
+        bucket_card, text="按照选择的模式执行", bootstyle="info", font=("微软雅黑", 8)
     )
     info_label.pack(anchor=CENTER, pady=(4, 0))
     # ==================== 热键设置卡片 ====================
@@ -2804,7 +2804,7 @@ def create_gui():
     hotkey_label = ttkb.Label(
         hotkey_frame,
         text="启动/暂停热键",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
         bootstyle="primary",
     )
     hotkey_label.pack(side=LEFT, padx=(0, 8))
@@ -2820,13 +2820,13 @@ def create_gui():
         hotkey_card,
         text=f"按 {hotkey_name} 启动/暂停 | 点击按钮修改",
         bootstyle="primary",
-        font=("Segoe UI", 8, "bold"),
+        font=("微软雅黑", 8, "bold"),
     )
     hotkey_info_label.pack(pady=(4, 0), padx=4)
 
     # 提示标签（用于捕获模式显示）
     hotkey_tip_label = ttkb.Label(
-        hotkey_card, text="", bootstyle="secondary", font=("Segoe UI", 8)
+        hotkey_card, text="", bootstyle="secondary", font=("微软雅黑", 8)
     )
 
     def stop_hotkey_capture():
@@ -3116,12 +3116,12 @@ def create_gui():
     custom_input_frame.grid(row=2, column=1, padx=2, pady=2, sticky="ew")
 
     custom_width_label = ttkb.Label(
-        custom_input_frame, text="宽:", width=2, font=("Segoe UI", 9)
+        custom_input_frame, text="宽:", width=2, font=("微软雅黑", 9)
     )
     custom_width_label.pack(side=LEFT, padx=(0, 2))
 
     custom_width_entry = ttkb.Entry(
-        custom_input_frame, textvariable=custom_width_var, width=5, font=("Segoe UI", 9)
+        custom_input_frame, textvariable=custom_width_var, width=5, font=("微软雅黑", 9)
     )
     custom_width_entry.pack(side=LEFT, padx=(0, 8))
 
@@ -3149,7 +3149,7 @@ def create_gui():
     custom_width_entry.bind("<Return>", on_custom_width_change)
 
     custom_height_label = ttkb.Label(
-        custom_input_frame, text="高:", width=2, font=("Segoe UI", 9)
+        custom_input_frame, text="高:", width=2, font=("微软雅黑", 9)
     )
     custom_height_label.pack(side=LEFT, padx=(0, 2))
 
@@ -3157,7 +3157,7 @@ def create_gui():
         custom_input_frame,
         textvariable=custom_height_var,
         width=5,
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
     )
     custom_height_entry.pack(side=LEFT)
 
@@ -3189,7 +3189,7 @@ def create_gui():
         resolution_card,
         textvariable=resolution_info_var,
         bootstyle="info",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
     )
     # 始终显示分辨率信息标签
     info_label.pack(pady=(4, 0))
@@ -3207,7 +3207,7 @@ def create_gui():
     record_frame.pack(fill=X, pady=4)
 
     record_label = ttkb.Label(
-        record_frame, text="是否启用钓鱼记录", font=("Segoe UI", 9), bootstyle="info"
+        record_frame, text="是否启用钓鱼记录", font=("微软雅黑", 9), bootstyle="info"
     )
     record_label.pack(side=LEFT, padx=(0, 8))
 
@@ -3241,7 +3241,7 @@ def create_gui():
     legendary_frame.pack(fill=X, pady=4)
 
     legendary_label = ttkb.Label(
-        legendary_frame, text="传奇鱼自动截屏", font=("Segoe UI", 9), bootstyle="info"
+        legendary_frame, text="传奇鱼自动截屏", font=("微软雅黑", 9), bootstyle="info"
     )
     legendary_label.pack(side=LEFT, padx=(0, 8))
 
@@ -3275,7 +3275,7 @@ def create_gui():
     first_capture_frame.pack(fill=X, pady=4)
 
     first_capture_label = ttkb.Label(
-        first_capture_frame, text="首次捕获自动截屏", font=("Segoe UI", 9), bootstyle="info"
+        first_capture_frame, text="首次捕获自动截屏", font=("微软雅黑", 9), bootstyle="info"
     )
     first_capture_label.pack(side=LEFT, padx=(0, 8))
 
@@ -3334,7 +3334,7 @@ def create_gui():
     uno_hotkey_label = ttkb.Label(
         uno_hotkey_frame,
         text="UNO功能热键",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
         bootstyle="primary",
     )
     uno_hotkey_label.pack(side=LEFT, padx=(0, 8))
@@ -3350,13 +3350,13 @@ def create_gui():
         uno_card,
         text=f"按 {uno_hotkey_name} 触发UNO功能 | 点击按钮修改",
         bootstyle="primary",
-        font=("Segoe UI", 8, "bold"),
+        font=("微软雅黑", 8, "bold"),
     )
     uno_hotkey_info_label.pack(pady=(4, 0), padx=4)
 
     # UNO热键提示标签（用于捕获模式显示）
     uno_hotkey_tip_label = ttkb.Label(
-        uno_card, text="", bootstyle="secondary", font=("Segoe UI", 8)
+        uno_card, text="", bootstyle="secondary", font=("微软雅黑", 8)
     )
 
     def uno_stop_hotkey_capture():
@@ -3518,7 +3518,7 @@ def create_gui():
     uno_input1_label = ttkb.Label(
         uno_input1_frame,
         text="当前牌数:",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
         bootstyle="primary",
         width=8,
     )
@@ -3530,7 +3530,7 @@ def create_gui():
         uno_input1_frame,
         textvariable=uno_input1_var,
         width=2,
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
         bootstyle="light",
         state="readonly",
     )
@@ -3542,7 +3542,7 @@ def create_gui():
     uno_input2_label = ttkb.Label(
         uno_input2_frame,
         text="抽取牌数:",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
         bootstyle="primary",
         width=8,
     )
@@ -3570,7 +3570,7 @@ def create_gui():
     release_label = ttkb.Label(
         release_frame,
         text="启用放生功能",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
         bootstyle="success",
     )
     release_label.pack(side=LEFT, padx=(0, 8))
@@ -3589,7 +3589,7 @@ def create_gui():
     ttkb.Label(
         release_quality_frame,
         text="选择要放生的品质",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
         bootstyle="success",
     ).pack(anchor=CENTER, pady=(0, 4))
 
@@ -3801,7 +3801,7 @@ def create_gui():
     # 设置自定义亮色主题，与深色背景搭配
     style.configure("Custom.TLabelframe", bordercolor="#4F46E5")
     style.configure(
-        "Custom.TLabelframe.Label", foreground="#E2E8F0", font=("Segoe UI", 10, "bold")
+        "Custom.TLabelframe.Label", foreground="#E2E8F0", font=("微软雅黑", 10, "bold")
     )
 
     stats_card = ttkb.Labelframe(
@@ -3835,7 +3835,7 @@ def create_gui():
         row1_frame,
         textvariable=standard_var,
         foreground="#94A3B8",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     standard_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3843,7 +3843,7 @@ def create_gui():
         row1_frame,
         textvariable=uncommon_var,
         foreground="#34D399",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     uncommon_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3851,7 +3851,7 @@ def create_gui():
         row1_frame,
         textvariable=rare_var,
         foreground="#60A5FA",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     rare_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3863,7 +3863,7 @@ def create_gui():
         row2_frame,
         textvariable=epic_var,
         foreground="#A78BFA",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     epic_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3871,7 +3871,7 @@ def create_gui():
         row2_frame,
         textvariable=legendary_var,
         foreground="#FBBF24",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     legendary_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3879,7 +3879,7 @@ def create_gui():
         row2_frame,
         textvariable=total_var,
         foreground="#64748B",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     total_label.pack(side=LEFT, padx=12, pady=3, expand=YES)
 
@@ -3930,7 +3930,7 @@ def create_gui():
         "CustomTreeview.Treeview.Heading",
         background="#3B82F6",
         foreground="#ffffff",
-        font=("Segoe UI", 10, "bold"),
+        font=("微软雅黑", 10, "bold"),
         borderwidth=0,
         relief="flat",
         padding=(10, 5),
@@ -3981,7 +3981,7 @@ def create_gui():
     # 移除background和fieldbackground设置，让标签背景色能够显示
     style.configure(
         "CustomTreeview.Treeview",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
         foreground="#1E293B",
         rowheight=28,
         bordercolor="#E2E8F0",
@@ -4271,7 +4271,7 @@ def create_gui():
         log_control_frame,
         textvariable=log_count_var,
         bootstyle="info",
-        font=("Segoe UI", 9),
+        font=("微软雅黑", 9),
     )
     log_count_label.pack(side=LEFT)
 
@@ -4296,7 +4296,7 @@ def create_gui():
     log_text = tk.Text(
         log_text_frame,
         wrap="word",  # 自动换行
-        font=("Consolas", 8),
+        font=("微软雅黑", 8),
         bg="#1a1a1a",
         fg="#e0e0e0",
         insertbackground="blue",
@@ -4433,7 +4433,7 @@ def create_gui():
         left_status_frame,
         text=f"按 {hotkey_name} 启动/暂停",
         bootstyle="light",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     status_label.pack(anchor="w")
 
@@ -4441,7 +4441,7 @@ def create_gui():
         left_status_frame,
         text="v.2.13 | PartyFish",
         bootstyle="light",
-        font=("Segoe UI", 8, "bold"),
+        font=("微软雅黑", 8, "bold"),
     )
     version_label.pack(anchor="w", pady=(2, 0))
 
@@ -4450,7 +4450,7 @@ def create_gui():
     right_status_frame.pack(side=RIGHT, fill=Y, padx=(80, 0))
 
     dev_label = ttkb.Label(
-        right_status_frame, text="by ", bootstyle="light", font=("Segoe UI", 9, "bold")
+        right_status_frame, text="by ", bootstyle="light", font=("微软雅黑", 9, "bold")
     )
     dev_label.pack(side=LEFT, padx=(0, 2))
 
@@ -4460,7 +4460,7 @@ def create_gui():
         text="开发者",
         bootstyle="light",
         cursor="hand2",
-        font=("Segoe UI", 9, "bold"),
+        font=("微软雅黑", 9, "bold"),
     )
     dev_link.pack(side=LEFT)
 
@@ -4511,7 +4511,7 @@ def create_gui():
             content_frame,
             text="PartyFish 开发者",
             bootstyle="primary",
-            font=("Helvetica", 16, "bold"),
+            font=("微软雅黑", 16, "bold"),
             cursor="hand2",
         )
         title_label.pack(pady=(0, 20))
@@ -4525,7 +4525,7 @@ def create_gui():
                 content_frame,
                 text=f"• {dev}",
                 bootstyle="light",
-                font=("Helvetica", 12),
+                font=("微软雅黑", 12),
             )
             dev_label.pack(pady=5, anchor="w")
 
@@ -6423,7 +6423,7 @@ class DoubleClickCloseWarningWindow:
         title_label = ttkb.Label(
             main_frame,
             text="⚠️鱼桶满/没鱼饵警告!",
-            font=("Segoe UI", 16, "bold"),
+            font=("微软雅黑", 16, "bold"),
             bootstyle="danger",
         )
         title_label.pack(pady=(10, 15))
@@ -6432,7 +6432,7 @@ class DoubleClickCloseWarningWindow:
         info_label = ttkb.Label(
             main_frame,
             text="检测到鱼桶已满/没鱼饵！请及时处理。",
-            font=("Segoe UI", 12),
+            font=("微软雅黑", 12),
             bootstyle="info",
         )
         info_label.pack(pady=(0, 20))
@@ -6441,7 +6441,7 @@ class DoubleClickCloseWarningWindow:
         hint_label = ttkb.Label(
             main_frame,
             text="🖱️ 操作提示：\n• 双击鼠标左键关闭警告\n• 或点击下方按钮关闭",
-            font=("Segoe UI", 10),
+            font=("微软雅黑", 10),
             bootstyle="warning",
             justify="left",
         )
@@ -7929,14 +7929,14 @@ def uno_show_popup():
     title_label = ttkb.Label(
         popup,
         text="🎮 UNO 操作提示",
-        font=("Segoe UI", 12, "bold"),
+        font=("微软雅黑", 12, "bold"),
         bootstyle="primary",
     )
     title_label.pack(pady=15)
 
     # 添加提示文本
     text_label = ttkb.Label(
-        popup, text="是否继续操作？", font=("Segoe UI", 10), bootstyle="light"
+        popup, text="是否继续操作？", font=("微软雅黑", 10), bootstyle="light"
     )
     text_label.pack(pady=5)
 
